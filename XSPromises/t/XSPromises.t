@@ -3,7 +3,10 @@ use strict;
 use warnings;
 
 use Test::More;
+use AnyEvent;
 use AnyEvent::XSPromises;
+
+my $cv= AE::cv;
 
 my $deferred= AnyEvent::XSPromises::deferred();
 my $promise= $deferred->promise;
@@ -51,8 +54,9 @@ for (1..1) {
     )->then(sub {
         is($_, undef);
         $reached_end= 1;
-    })
+    })->then($cv)
 }
+$cv->recv;
 ok($any);
 ok($next_ok);
 ok($reached_end);
