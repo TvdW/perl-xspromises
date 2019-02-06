@@ -3,9 +3,9 @@ use strict;
 use warnings;
 
 use Test::More;
-use XSPromises;
+use AnyEvent::XSPromises;
 
-my $deferred= XSPromises::deferred();
+my $deferred= AnyEvent::XSPromises::deferred();
 my $promise= $deferred->promise;
 $deferred->resolve(1, 2, 3);
 my ($next_ok, $any, $reached_end);

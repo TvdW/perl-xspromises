@@ -1,4 +1,4 @@
-package XSPromises;
+package AnyEvent::XSPromises;
 
 use 5.010;
 use strict;
@@ -7,11 +7,11 @@ use warnings;
 our $VERSION = '0.001';
 
 require XSLoader;
-XSLoader::load('XSPromises', $VERSION);
+XSLoader::load('AnyEvent::XSPromises', $VERSION);
 
-XSPromises::_set_conversion_helper(sub {
+AnyEvent::XSPromises::_set_conversion_helper(sub {
     my $promise= shift;
-    my $deferred= XSPromises::deferred();
+    my $deferred= AnyEvent::XSPromises::deferred();
     $promise->then(sub {
         $deferred->resolve(@_);
     }, sub {
@@ -21,7 +21,7 @@ XSPromises::_set_conversion_helper(sub {
 });
 
 my $in;
-XSPromises::_set_backend(sub {
+AnyEvent::XSPromises::_set_backend(sub {
     if (!$in) {
         $in= 1;
         local $_;
@@ -29,7 +29,7 @@ XSPromises::_set_backend(sub {
         # next/last/redo. Without it, an accidental invocation of one of those could cause serious
         # problems. We have to assign it to @useless_variable or Perl thinks our code is a no-op
         # and optimizes it away.
-        my @useless_variable= sort { XSPromises::flush(); 0 } 1, 2;
+        my @useless_variable= sort { AnyEvent::XSPromises::flush(); 0 } 1, 2;
         $in= 0;
     }
 });

@@ -5,7 +5,7 @@
 
 #include "ppport.h"
 
-#define MY_CXT_KEY "XSPromises::_guts" XS_VERSION
+#define MY_CXT_KEY "AnyEvent::XSPromises::_guts" XS_VERSION
 
 typedef struct xspr_callback_s xspr_callback_t;
 typedef struct xspr_promise_s xspr_promise_t;
@@ -103,11 +103,11 @@ typedef struct {
 
 typedef struct {
     xspr_promise_t* promise;
-} XSPromises__Deferred;
+} AnyEvent__XSPromises__Deferred;
 
 typedef struct {
     xspr_promise_t* promise;
-} XSPromises__Promise;
+} AnyEvent__XSPromises__Promise;
 
 START_MY_CXT
 
@@ -444,9 +444,9 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
     }
 
     /* If we got one of our own promises: great, not much to do here! */
-    if (sv_derived_from(input, "XSPromises::PromisePtr")) {
+    if (sv_derived_from(input, "AnyEvent::XSPromises::PromisePtr")) {
         IV tmp = SvIV((SV*)SvRV(input));
-        XSPromises__Promise* promise = INT2PTR(XSPromises__Promise*, tmp);
+        AnyEvent__XSPromises__Promise* promise = INT2PTR(AnyEvent__XSPromises__Promise*, tmp);
         xspr_promise_incref(aTHX_ promise->promise);
         return promise->promise;
     }
@@ -461,10 +461,10 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
             new_result->count == 1 &&
             new_result->result[0] != NULL &&
             SvROK(new_result->result[0]) &&
-            sv_derived_from(new_result->result[0], "XSPromises::PromisePtr")) {
+            sv_derived_from(new_result->result[0], "AnyEvent::XSPromises::PromisePtr")) {
             /* This is expected: our conversion function returned us one of our own promises */
             IV tmp = SvIV((SV*)SvRV(new_result->result[0]));
-            XSPromises__Promise* new_promise = INT2PTR(XSPromises__Promise*, tmp);
+            AnyEvent__XSPromises__Promise* new_promise = INT2PTR(AnyEvent__XSPromises__Promise*, tmp);
 
             xspr_promise_t* promise = new_promise->promise;
             xspr_promise_incref(aTHX_ promise);
@@ -485,14 +485,14 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
 }
 
 
-MODULE = XSPromises     PACKAGE = XSPromises
+MODULE = AnyEvent::XSPromises     PACKAGE = AnyEvent::XSPromises
 
 PROTOTYPES: DISABLE
 
 TYPEMAP: <<EOT
 TYPEMAP
-XSPromises::Deferred* T_PTROBJ
-XSPromises::Promise* T_PTROBJ
+AnyEvent::XSPromises::Deferred* T_PTROBJ
+AnyEvent::XSPromises::Promise* T_PTROBJ
 EOT
 
 BOOT:
@@ -508,10 +508,10 @@ BOOT:
     MY_CXT.backend_fn = NULL;
 }
 
-XSPromises::Deferred*
+AnyEvent::XSPromises::Deferred*
 deferred()
     CODE:
-        Newxz(RETVAL, 1, XSPromises__Deferred);
+        Newxz(RETVAL, 1, AnyEvent__XSPromises__Deferred);
         xspr_promise_t* promise = xspr_promise_new(aTHX);
         RETVAL->promise = promise;
     OUTPUT:
@@ -541,13 +541,13 @@ _set_backend(backend)
         MY_CXT.backend_fn = newSVsv(backend);
 
 
-MODULE = XSPromises     PACKAGE = XSPromises::DeferredPtr
+MODULE = AnyEvent::XSPromises     PACKAGE = AnyEvent::XSPromises::DeferredPtr
 
-XSPromises::Promise*
+AnyEvent::XSPromises::Promise*
 promise(self)
-        XSPromises::Deferred* self
+        AnyEvent::XSPromises::Deferred* self
     CODE:
-        Newxz(RETVAL, 1, XSPromises__Promise);
+        Newxz(RETVAL, 1, AnyEvent__XSPromises__Promise);
         RETVAL->promise = self->promise;
         xspr_promise_incref(aTHX_ RETVAL->promise);
     OUTPUT:
@@ -555,7 +555,7 @@ promise(self)
 
 void
 resolve(self, ...)
-        XSPromises::Deferred* self
+        AnyEvent::XSPromises::Deferred* self
     CODE:
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot resolve deferred: not pending");
@@ -572,7 +572,7 @@ resolve(self, ...)
 
 void
 reject(self, ...)
-        XSPromises::Deferred* self
+        AnyEvent::XSPromises::Deferred* self
     CODE:
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot reject deferred: not pending");
@@ -589,17 +589,17 @@ reject(self, ...)
 
 void
 DESTROY(self)
-        XSPromises::Deferred* self
+        AnyEvent::XSPromises::Deferred* self
     CODE:
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
 
 
-MODULE = XSPromises     PACKAGE = XSPromises::PromisePtr
+MODULE = AnyEvent::XSPromises     PACKAGE = AnyEvent::XSPromises::PromisePtr
 
 void
 then(self, ...)
-        XSPromises::Promise* self
+        AnyEvent::XSPromises::Promise* self
     PPCODE:
         SV* on_resolve;
         SV* on_reject;
@@ -614,14 +614,14 @@ then(self, ...)
 
         /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
         if (GIMME_V != G_VOID) {
-            XSPromises__Promise* next_promise;
-            Newxz(next_promise, 1, XSPromises__Promise);
+            AnyEvent__XSPromises__Promise* next_promise;
+            Newxz(next_promise, 1, AnyEvent__XSPromises__Promise);
 
             next = xspr_promise_new(aTHX);
             next_promise->promise = next;
 
             ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), "XSPromises::PromisePtr", (void*)next_promise);
+            sv_setref_pv(ST(0), "AnyEvent::XSPromises::PromisePtr", (void*)next_promise);
         }
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ on_resolve, on_reject, next);
@@ -632,7 +632,7 @@ then(self, ...)
 
 void
 DESTROY(self)
-        XSPromises::Promise* self
+        AnyEvent::XSPromises::Promise* self
     CODE:
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
