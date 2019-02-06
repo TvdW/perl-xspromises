@@ -4,11 +4,11 @@ use warnings;
 
 use Test::More;
 use AnyEvent;
-use AnyEvent::XSPromises;
+use AnyEvent::XSPromises qw/deferred resolved rejected collect/;
 
 my $cv= AE::cv;
 
-my $deferred= AnyEvent::XSPromises::deferred();
+my $deferred= deferred;
 my $promise= $deferred->promise;
 $deferred->resolve(1, 2, 3);
 my ($next_ok, $any, $finally_called, $reached_end);
@@ -62,8 +62,20 @@ for (1..1) {
     })->then(sub {
         fail;
     })->catch(sub {
+        collect(resolved(1), resolved(2));
+    })->then(sub {
+        is_deeply(\@_, [ [1], [2] ]);
+        collect(resolved(2), rejected(5));
+    })->then(sub {
+        fail;
+    }, sub {
+        is($_[0], 5);
+    })->then(sub {
         $reached_end= 1;
-    })->then($cv)
+    })->then($cv, sub {
+        diag $_[0]; fail;
+        $cv->();
+    })
 }
 $cv->recv;
 ok($any);
