@@ -518,12 +518,12 @@ deferred()
         RETVAL
 
 void
-flush()
+___flush()
     CODE:
         xspr_queue_flush(aTHX);
 
 void
-_set_conversion_helper(helper)
+___set_conversion_helper(helper)
         SV* helper
     CODE:
         dMY_CXT;
@@ -532,7 +532,7 @@ _set_conversion_helper(helper)
         MY_CXT.conversion_helper = newSVsv(helper);
 
 void
-_set_backend(backend)
+___set_backend(backend)
         SV* backend
     CODE:
         dMY_CXT;
