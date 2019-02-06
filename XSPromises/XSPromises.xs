@@ -274,17 +274,8 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** input, int input_count)
     SV* error;
     xspr_result_t* result;
 
-    /* Temporary variables for PUSHBLOCK to work */
-    PERL_CONTEXT* cx;
-    SV** newsp;
-    I32 gimme = GIMME_V;
-
     ENTER;
     SAVETMPS;
-
-    /* Push a 'pseudo-block' onto the stack. We need to do this, so that an accidental
-     * 'next', 'last', 'goto', etc, doesn't suddenly jump out of the callback loop */
-    PUSHBLOCK(cx, CXt_NULL, SP);
 
     PUSHMARK(SP);
     EXTEND(SP, input_count);
@@ -307,8 +298,6 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** input, int input_count)
         }
     }
     PUTBACK;
-
-    POPBLOCK(cx, PL_curpm);
 
     FREETMPS;
     LEAVE;

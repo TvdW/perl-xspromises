@@ -25,7 +25,11 @@ XSPromises::_set_backend(sub {
     if (!$in) {
         $in= 1;
         local $_;
-        XSPromises::flush();
+        # sort makes perl push a pseudo-block on the stack that prevents callback code from using
+        # next/last/redo. Without it, an accidental invocation of one of those could cause serious
+        # problems. We have to assign it to @useless_variable or Perl thinks our code is a no-op
+        # and optimizes it away.
+        my @useless_variable= sort { XSPromises::flush(); 0 } 1, 2;
         $in= 0;
     }
 });
