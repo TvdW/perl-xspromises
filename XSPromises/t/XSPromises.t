@@ -1,108 +1,63 @@
-use v5.18;
+use 5.010;
+use strict;
 use warnings;
 
-use Test::More tests => 1;
-use Data::Dumper;
-use Carp;
-use Benchmark qw/timethese/;
-use Devel::Peek;
-BEGIN { use_ok('XSPromises') };
-use Promises;
+use Test::More;
+use XSPromises;
 
 my $deferred= XSPromises::deferred();
 my $promise= $deferred->promise;
 $deferred->resolve(1, 2, 3);
-my ($next_ok, $any);
+my ($next_ok, $any, $reached_end);
 for (1..1) {
     my $final= $promise->then(
         sub {
-            print STDERR "SUCCESS\n";
+            ok(1);
             $any= 1;
             return (123, 456);
         },
         sub {
-            print STDERR "Wait what?!\n";
+            fail;
         }
     )->then(sub {
-        print STDERR "123: $_[0]; 456: $_[1]\n";
+        is($_[0], 123);
+        is($_[1], 456);
         die "Does this work?";
     })->then(
         sub {
-            print STDERR "FAIL\n";
+            fail;
         },
         sub {
-            print STDERR "Error: @_\n";
+            ok(($_[0] =~ /Does this/) ? 1 : 0);
             next;
         }
     )->then(
         sub {
-            print STDERR "FAIL\n";
+            fail;
         },
         sub {
-            print STDERR "next via reject: @_\n";
-            warn "Test, 123";
-            warn(Carp::longmess());
+            ok(($_[0] =~ /outside a loop block/) ? 1 : 0);
             $next_ok= 1;
         }
     )->then(sub {
         Fakepromise->new
     })->then(
         sub {
-            print STDERR "500 = $_[0]\n";
+            is($_[0], 500);
+            $_= 5;
         }, sub {
-            print STDERR "FAIL: @_\n";
+            fail;
         }
-    );
-    print STDERR Dumper($deferred, $promise, $final);
+    )->then(sub {
+        is($_, undef);
+        $reached_end= 1;
+    })
 }
-die "callbacks weren't handled" unless $any;
-die "our next; prevention code really broke" unless $next_ok;
+ok($any);
+ok($next_ok);
+ok($reached_end);
 
-sub a_promise {
-    my $deferred= XSPromises::deferred;
-    $deferred->resolve(1,2,3,4,5);
-    return $deferred->promise;
-}
-sub b_promise {
-    my $deferred= Promises::deferred;
-    $deferred->resolve(1,2,3,4,5);
-    return $deferred->promise;
-}
-
-timethese(-10, {
-    new_one => sub {
-        my $have_result;
-        a_promise()->then(sub { a_promise(); })->then(sub { $have_result= 1; });
-        die unless $have_result;
-    },
-    new_two => sub {
-        my $i;
-        a_promise()->then(sub {
-            if (++$i == 5) {
-                return;
-            } else {
-                a_promise()->then(__SUB__);
-            }
-        });
-        die unless $i == 5;
-    },
-    old_one => sub {
-        my $have_result;
-        b_promise()->then(sub { b_promise(); })->then(sub { $have_result= 1; });
-        die unless $have_result;
-    },
-    old_two => sub {
-        my $i;
-        b_promise()->then(sub {
-            if (++$i == 5) {
-                return;
-            } else {
-                b_promise()->then(__SUB__);
-            }
-        });
-        die unless $i == 5;
-    },
-});
+done_testing;
 
 package Fakepromise;
 sub new { bless {}, 'Fakepromise' }

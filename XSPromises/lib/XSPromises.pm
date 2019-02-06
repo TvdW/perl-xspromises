@@ -24,6 +24,7 @@ my $in;
 XSPromises::_set_backend(sub {
     if (!$in) {
         $in= 1;
+        local $_;
         XSPromises::flush();
         $in= 0;
     }
