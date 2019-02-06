@@ -284,6 +284,10 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** input, int input_count)
     }
     PUTBACK;
 
+    /* Clear $_ so that callbacks don't end up talking to each other by accident */
+    SAVE_DEFSV;
+    DEFSV_set(sv_newmortal());
+
     count = call_sv(perl_fn, G_EVAL|G_ARRAY);
 
     SPAGAIN;
