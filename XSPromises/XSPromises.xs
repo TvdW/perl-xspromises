@@ -3,14 +3,11 @@
 #include "perl.h"
 #include "XSUB.h"
 
-#define NEED_sv_2pv_flags
 #include "ppport.h"
 
 #define MY_CXT_KEY "XSPromises::_guts" XS_VERSION
 
 typedef struct xspr_callback_s xspr_callback_t;
-typedef struct xspr_pending_promise_s xspr_pending_promise_t;
-typedef struct xspr_finished_promise_s xspr_finished_promise_t;
 typedef struct xspr_promise_s xspr_promise_t;
 typedef struct xspr_result_s xspr_result_t;
 typedef struct xspr_callback_queue_s xspr_callback_queue_t;
@@ -52,21 +49,17 @@ struct xspr_result_s {
     int refs;
 };
 
-struct xspr_pending_promise_s {
-    xspr_callback_t** callbacks;
-    int callbacks_count;
-};
-
-struct xspr_finished_promise_s {
-    xspr_result_t* result;
-};
-
 struct xspr_promise_s {
     xspr_promise_state_t state;
     int refs;
     union {
-        xspr_pending_promise_t pending;
-        xspr_finished_promise_t finished;
+        struct {
+            xspr_callback_t** callbacks;
+            int callbacks_count;
+        } pending;
+        struct {
+            xspr_result_t *result;
+        } finished;
     };
 };
 
@@ -134,6 +127,7 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
         } else if (origin->finished.result->state == XSPR_RESULT_REJECTED) {
             callback_fn = callback->perl.on_reject;
         } else {
+            callback_fn = NULL; /* Be quiet, bad compiler! */
             assert(0);
         }
 
@@ -202,7 +196,7 @@ void xspr_queue_flush(pTHX)
 
     if (MY_CXT.in_flush) {
         /* XXX: is there a reasonable way to trigger this? */
-        warn("Rejecting request to flush Promises queue: already processing");
+        warn("Rejecting request to flush promises queue: already processing");
         return;
     }
     MY_CXT.in_flush = 1;
@@ -352,7 +346,8 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
     promise->finished.result = result;
     xspr_result_incref(aTHX_ promise->finished.result);
 
-    for (int i = 0; i < count; i++) {
+    int i;
+    for (i = 0; i < count; i++) {
         xspr_queue_add(aTHX_ pending_callbacks[i], promise);
     }
     Safefree(pending_callbacks);
@@ -380,12 +375,12 @@ void xspr_promise_incref(pTHX_ xspr_promise_t* promise)
 void xspr_promise_decref(pTHX_ xspr_promise_t *promise)
 {
     if (--(promise->refs) == 0) {
-        assert(promise->state == XSPR_STATE_PENDING || promise->state == XSPR_STATE_FINISHED);
-
         if (promise->state == XSPR_STATE_PENDING) {
+            /* XXX: is this a bad thing we should warn for? */
             int count = promise->pending.callbacks_count;
             xspr_callback_t **callbacks = promise->pending.callbacks;
-            for (int i = 0; i < count; i++) {
+            int i;
+            for (i = 0; i < count; i++) {
                 xspr_callback_free(aTHX_ callbacks[i]);
             }
             Safefree(callbacks);
@@ -436,6 +431,7 @@ xspr_callback_t* xspr_callback_new_chain(pTHX_ xspr_promise_t* chain)
     return callback;
 }
 
+/* Adds a then to the promise. Takes ownership of the callback */
 void xspr_promise_then(pTHX_ xspr_promise_t* promise, xspr_callback_t* callback)
 {
     if (promise->state == XSPR_STATE_PENDING) {
@@ -451,6 +447,7 @@ void xspr_promise_then(pTHX_ xspr_promise_t* promise, xspr_callback_t* callback)
     }
 }
 
+/* Returns a promise if the given SV is a thenable. Ownership handed to the caller! */
 xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
 {
     if (input == NULL || !sv_isobject(input)) {
@@ -499,7 +496,7 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
 }
 
 
-MODULE = XSPromises		PACKAGE = XSPromises		
+MODULE = XSPromises     PACKAGE = XSPromises
 
 PROTOTYPES: DISABLE
 
@@ -511,6 +508,8 @@ EOT
 
 BOOT:
 {
+    /* XXX: do we need a CLONE? */
+
     MY_CXT_INIT;
     MY_CXT.queue_head = NULL;
     MY_CXT.queue_tail = NULL;
@@ -519,18 +518,6 @@ BOOT:
     MY_CXT.conversion_helper = NULL;
     MY_CXT.backend_fn = NULL;
 }
-
-void
-CLONE(...)
-    CODE:
-        MY_CXT_CLONE;
-        /* Unclear what's the right thing to do here. Let's just unshare all state and hope nobody ever needs this */
-        MY_CXT.queue_head = NULL;
-        MY_CXT.queue_tail = NULL;
-        MY_CXT.in_flush = 0;
-        MY_CXT.backend_scheduled = 0;
-        MY_CXT.conversion_helper = newSVsv(MY_CXT.conversion_helper);
-        MY_CXT.backend_fn = newSVsv(MY_CXT.backend_fn);
 
 XSPromises::Deferred*
 deferred()
@@ -552,7 +539,7 @@ _set_conversion_helper(helper)
     CODE:
         dMY_CXT;
         if (MY_CXT.conversion_helper != NULL)
-            SvREFCNT_dec(MY_CXT.conversion_helper);
+            croak("Refusing to set a conversion helper twice");
         MY_CXT.conversion_helper = newSVsv(helper);
 
 void
@@ -561,7 +548,7 @@ _set_backend(backend)
     CODE:
         dMY_CXT;
         if (MY_CXT.backend_fn != NULL)
-            SvREFCNT_dec(MY_CXT.backend_fn);
+            croak("Refusing to set a backend twice");
         MY_CXT.backend_fn = newSVsv(backend);
 
 
@@ -586,7 +573,8 @@ resolve(self, ...)
         }
 
         xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, items-1);
-        for (int i = 0; i < items-1; i++) {
+        int i;
+        for (i = 0; i < items-1; i++) {
             result->result[i] = SvREFCNT_inc(ST(1+i));
         }
         xspr_promise_finish(aTHX_ self->promise, result);
@@ -602,7 +590,8 @@ reject(self, ...)
         }
 
         xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, items-1);
-        for (int i = 0; i < items-1; i++) {
+        int i;
+        for (i = 0; i < items-1; i++) {
             result->result[i] = SvREFCNT_inc(ST(1+i));
         }
         xspr_promise_finish(aTHX_ self->promise, result);
