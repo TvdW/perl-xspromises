@@ -21,7 +21,4 @@ sub rejected {
     return $d->promise;
 }
 
-# Convenience methods
-sub catch { $_[0]->then(undef, @_) }
-
 1;

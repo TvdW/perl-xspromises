@@ -45,7 +45,9 @@ for (1..1) {
             ok(($_[0] =~ /outside a loop block/) ? 1 : 0);
             $next_ok= 1;
         }
-    )->then(sub {
+    )->catch(sub {
+        fail;
+    })->then(sub {
         Fakepromise->new
     })->then(
         sub {
@@ -56,6 +58,10 @@ for (1..1) {
         }
     )->then(sub {
         is($_, undef);
+        die "test catch";
+    })->then(sub {
+        fail;
+    })->catch(sub {
         $reached_end= 1;
     })->then($cv)
 }

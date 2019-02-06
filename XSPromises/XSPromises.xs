@@ -673,6 +673,31 @@ then(self, ...)
         XSRETURN(1);
 
 void
+catch(self, on_reject)
+        AnyEvent::XSPromises::Promise* self
+        SV* on_reject
+    PPCODE:
+        xspr_promise_t* next = NULL;
+
+        /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
+        if (GIMME_V != G_VOID) {
+            AnyEvent__XSPromises__Promise* next_promise;
+            Newxz(next_promise, 1, AnyEvent__XSPromises__Promise);
+
+            next = xspr_promise_new(aTHX);
+            next_promise->promise = next;
+
+            ST(0) = sv_newmortal();
+            sv_setref_pv(ST(0), "AnyEvent::XSPromises::PromisePtr", (void*)next_promise);
+        }
+
+        xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ &PL_sv_undef, on_reject, next);
+        xspr_promise_then(aTHX_ self->promise, callback);
+        xspr_queue_maybe_schedule(aTHX);
+
+        XSRETURN(1);
+
+void
 finally(self, on_finally)
         AnyEvent::XSPromises::Promise* self
         SV* on_finally
