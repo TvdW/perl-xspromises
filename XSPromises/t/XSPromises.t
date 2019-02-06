@@ -11,7 +11,7 @@ my $cv= AE::cv;
 my $deferred= AnyEvent::XSPromises::deferred();
 my $promise= $deferred->promise;
 $deferred->resolve(1, 2, 3);
-my ($next_ok, $any, $reached_end);
+my ($next_ok, $any, $finally_called, $reached_end);
 for (1..1) {
     my $final= $promise->then(
         sub {
@@ -22,7 +22,10 @@ for (1..1) {
         sub {
             fail;
         }
-    )->then(sub {
+    )->finally(sub {
+        $finally_called= 1;
+        654;
+    })->then(sub {
         is($_[0], 123);
         is($_[1], 456);
         die "Does this work?";
@@ -49,7 +52,7 @@ for (1..1) {
             is($_[0], 500);
             $_= 5;
         }, sub {
-            fail;
+            fail($_[0]);
         }
     )->then(sub {
         is($_, undef);
@@ -60,6 +63,7 @@ $cv->recv;
 ok($any);
 ok($next_ok);
 ok($reached_end);
+ok($finally_called);
 
 done_testing;
 

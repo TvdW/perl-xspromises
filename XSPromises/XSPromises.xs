@@ -27,6 +27,7 @@ typedef enum {
 
 typedef enum {
     XSPR_CALLBACK_PERL,
+    XSPR_CALLBACK_FINALLY,
     XSPR_CALLBACK_CHAIN
 } xspr_callback_type_t;
 
@@ -38,6 +39,10 @@ struct xspr_callback_s {
             SV* on_reject;
             xspr_promise_t* next;
         } perl;
+        struct {
+            SV* on_finally;
+            xspr_promise_t* next;
+        } finally;
         xspr_promise_t* chain;
     };
 };
@@ -165,6 +170,21 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
             xspr_promise_finish(aTHX_ callback->perl.next, result);
         }
 
+    } else if (callback->type == XSPR_CALLBACK_FINALLY) {
+        SV* callback_fn = callback->finally.on_finally;
+        if (callback_fn != NULL) {
+            xspr_result_t* result;
+            result = xspr_invoke_perl(aTHX_
+                                      callback_fn,
+                                      origin->finished.result->result,
+                                      origin->finished.result->count);
+            xspr_result_decref(aTHX_ result);
+        }
+
+        if (callback->finally.next != NULL) {
+            xspr_promise_finish(aTHX_ callback->finally.next, origin->finished.result);
+        }
+
     } else {
         assert(0);
     }
@@ -181,6 +201,11 @@ void xspr_callback_free(pTHX_ xspr_callback_t *callback)
         SvREFCNT_dec(callback->perl.on_reject);
         if (callback->perl.next != NULL)
             xspr_promise_decref(aTHX_ callback->perl.next);
+
+    } else if (callback->type == XSPR_CALLBACK_FINALLY) {
+        SvREFCNT_dec(callback->finally.on_finally);
+        if (callback->finally.next != NULL)
+            xspr_promise_decref(aTHX_ callback->finally.next);
 
     } else {
         assert(0);
@@ -414,6 +439,19 @@ xspr_callback_t* xspr_callback_new_perl(pTHX_ SV* on_resolve, SV* on_reject, xsp
     return callback;
 }
 
+xspr_callback_t* xspr_callback_new_finally(pTHX_ SV* on_finally, xspr_promise_t* next)
+{
+    xspr_callback_t* callback;
+    Newxz(callback, 1, xspr_callback_t);
+    callback->type = XSPR_CALLBACK_FINALLY;
+    if (SvOK(on_finally))
+        callback->finally.on_finally = newSVsv(on_finally);
+    callback->finally.next = next;
+    if (next)
+        xspr_promise_incref(aTHX_ callback->finally.next);
+    return callback;
+}
+
 xspr_callback_t* xspr_callback_new_chain(pTHX_ xspr_promise_t* chain)
 {
     xspr_callback_t* callback;
@@ -491,7 +529,7 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
 
 MODULE = AnyEvent::XSPromises     PACKAGE = AnyEvent::XSPromises
 
-PROTOTYPES: DISABLE
+PROTOTYPES: ENABLE
 
 TYPEMAP: <<EOT
 TYPEMAP
@@ -629,6 +667,31 @@ then(self, ...)
         }
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ on_resolve, on_reject, next);
+        xspr_promise_then(aTHX_ self->promise, callback);
+        xspr_queue_maybe_schedule(aTHX);
+
+        XSRETURN(1);
+
+void
+finally(self, on_finally)
+        AnyEvent::XSPromises::Promise* self
+        SV* on_finally
+    PPCODE:
+        xspr_promise_t* next = NULL;
+
+        /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
+        if (GIMME_V != G_VOID) {
+            AnyEvent__XSPromises__Promise* next_promise;
+            Newxz(next_promise, 1, AnyEvent__XSPromises__Promise);
+
+            next = xspr_promise_new(aTHX);
+            next_promise->promise = next;
+
+            ST(0) = sv_newmortal();
+            sv_setref_pv(ST(0), "AnyEvent::XSPromises::PromisePtr", (void*)next_promise);
+        }
+
+        xspr_callback_t* callback = xspr_callback_new_finally(aTHX_ on_finally, next);
         xspr_promise_then(aTHX_ self->promise, callback);
         xspr_queue_maybe_schedule(aTHX);
 
