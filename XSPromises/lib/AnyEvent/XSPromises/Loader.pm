@@ -14,13 +14,21 @@ AnyEvent::XSPromises::___set_conversion_helper(sub {
     my $promise= shift;
     my $deferred= AnyEvent::XSPromises::deferred();
     my $called;
-    $promise->then(sub {
-        return if $called++;
-        $deferred->resolve(@_);
-    }, sub {
-        return if $called++;
-        $deferred->reject(@_);
-    });
+    eval {
+        $promise->then(sub {
+            return if $called++;
+            $deferred->resolve(@_);
+        }, sub {
+            return if $called++;
+            $deferred->reject(@_);
+        });
+        1;
+    } or do {
+        my $error= $@;
+        if (!$called++) {
+            $deferred->reject($error);
+        }
+    };
     return $deferred->promise;
 });
 
