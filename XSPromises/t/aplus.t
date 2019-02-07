@@ -308,10 +308,12 @@ my %tests= (
         });
     },
     no_resolve_with_self => sub {
-        return resolved; #XXX BROKEN
         my $r= resolved;
         my $p; $p= $r->then(sub {
             $p
+        });
+        $p->catch(sub {
+            ok(!!($_[0] =~ /TypeError/));
         });
     },
     can_thenable_other => sub {
