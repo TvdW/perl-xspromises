@@ -13,9 +13,12 @@ XSLoader::load('AnyEvent::XSPromises', $VERSION);
 AnyEvent::XSPromises::___set_conversion_helper(sub {
     my $promise= shift;
     my $deferred= AnyEvent::XSPromises::deferred();
+    my $called;
     $promise->then(sub {
+        return if $called++;
         $deferred->resolve(@_);
     }, sub {
+        return if $called++;
         $deferred->reject(@_);
     });
     return $deferred->promise;
