@@ -354,6 +354,27 @@ my %tests= (
             is($_[0], 2);
         })
     },
+    finally_with_resolve => sub {
+        resolved(1)->finally(sub{2})->then(sub {
+            is($_[0], 1);
+        })
+    },
+    finally_with_reject => sub {
+        rejected(1)->finally(sub{2})->then(sub {
+            fail;
+        }, sub {
+            is($_[0], 1);
+        })
+    },
+    finally_with_reject_die => sub {
+        rejected(1)->finally(sub {
+            die 123;
+        })->then(sub {
+            fail;
+        }, sub {
+            is($_[0], 1);
+        })
+    },
 );
 
 my @promises= map {
