@@ -299,6 +299,12 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** input, int input_count)
     SV* error;
     xspr_result_t* result;
 
+    if (!SvROK(perl_fn)) {
+        result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, 1);
+        result->result[0] = newSVpv("promise callbacks need to be a CODE reference", 0);
+        return result;
+    }
+
     ENTER;
     SAVETMPS;
 
