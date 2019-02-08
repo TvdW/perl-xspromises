@@ -652,6 +652,14 @@ reject(self, ...)
         xspr_result_decref(aTHX_ result);
         xspr_queue_maybe_schedule(aTHX);
 
+bool
+is_in_progress(self)
+        AnyEvent::XSPromises::Deferred* self
+    CODE:
+        RETVAL = (self->promise->state == XSPR_STATE_PENDING);
+    OUTPUT:
+        RETVAL
+
 void
 DESTROY(self)
         AnyEvent::XSPromises::Deferred* self
