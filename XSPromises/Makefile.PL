@@ -17,4 +17,18 @@ WriteMakefile(
     LICENSE           => "perl_5",
 	# Un-comment this if you add C files to link with later:
     # OBJECT            => '$(O_FILES)', # link all the C files too
+    
+    META_MERGE => {
+        'meta-spec' => { version => 2 },
+        resources => {
+            repository => {
+                type => 'git',
+                url => 'git://github.com/TvdW/perl-xspromises.git',
+                web => 'https://github.com/TvdW/perl-xspromises',
+            },
+            bugtracker => {
+                web => 'https://github.com/TvdW/perl-xspromises/issues',
+            },
+        },
+    },
 );
