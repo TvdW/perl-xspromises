@@ -1,13 +1,9 @@
 package AnyEvent::XSPromises;
 
-use 5.010;
 use strict;
 use warnings;
 
 use AnyEvent::XSPromises::Loader;
-
-use Exporter 'import';
-our @EXPORT_OK= qw/collect deferred resolved rejected/;
 
 sub resolved {
     my $d= deferred;
