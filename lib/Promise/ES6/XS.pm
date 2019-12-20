@@ -9,19 +9,32 @@ Promise::ES6::XS - Fast ES6 promises
 
 =head1 SYNOPSIS
 
-See L<Promise::ES6>.
+    use Promise::ES6::XS ();
+
+    use Promise::ES6 ();
+
+    # … now just use Promise::ES6.
 
 =head1 DESCRIPTION
 
-This module implements the same interface as L<Promise::ES6>, but with
-its major parts implemented in XS for speed.
+This module exposes a bare-bones Promise interface with its major parts
+implemented in XS for speed. Its purpose is not to be used directly but
+to furnish a faster backend for L<Promise::ES6>.
 
-The implementation is a refactor of L<AnyEvent::XSPromises>
-by Tom van der Woerdt (C<tvdw@cpan.org>).
+You don’t really need to load this module directly since L<Promise::ES6>
+will prefer it to the pure-perl version; the only reason you might load
+this module directly is if you want B<only> to use the XS backend (in
+which case you’ll need to load it first, as in the SYNOPSIS).
+
+The implementation is a fork and refactor of L<AnyEvent::XSPromises>.
+You can achieve similar performance to that module by using this module
+in tandem with L<Promise::ES6::AnyEvent>.
 
 =cut
 
 use Promise::ES6::XS::Loader ();
+
+use constant _BASE_PROMISE_CLASS => 'Promise::ES6';
 
 sub new {
     my ($class, $cr) = @_;
@@ -37,7 +50,7 @@ sub new {
                 # As of now, the backend doesn’t check whether the value
                 # given to resolve() is a promise. ES6 handles that case,
                 # though, so we do, too.
-                if (UNIVERSAL::isa($_[0], __PACKAGE__)) {
+                if (UNIVERSAL::isa($_[0], _BASE_PROMISE_CLASS)) {
                     $_[0]->then( sub { $deferred->resolve($_[0]) } );
                 }
                 else {
@@ -51,8 +64,7 @@ sub new {
     };
 
     if (!$ok) {
-        my $err = $@;
-        $$self = Promise::ES6::XS::Backend::rejected($err);
+        $deferred->reject(my $err = $@);
     }
 
     return bless $self, $class;

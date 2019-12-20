@@ -5,6 +5,8 @@
 
 #include "ppport.h"
 
+#include <stdbool.h>
+
 #define MY_CXT_KEY "Promise::ES6::XS::_guts" XS_VERSION
 
 typedef struct xspr_callback_s xspr_callback_t;
@@ -55,6 +57,7 @@ struct xspr_result_s {
 };
 
 struct xspr_promise_s {
+    bool detect_leak_yn;
     xspr_promise_state_t state;
     int refs;
     union {
@@ -575,6 +578,11 @@ deferred()
     CODE:
         Newxz(RETVAL, 1, Promise__ES6__XS__Backend__Deferred);
         xspr_promise_t* promise = xspr_promise_new(aTHX);
+
+        SV *detect_leak_perl = get_sv("Promise::ES6::DETECT_MEMORY_LEAKS", 0);
+
+        promise->detect_leak_yn = detect_leak_perl && SvTRUE(detect_leak_perl);
+
         RETVAL->promise = promise;
     OUTPUT:
         RETVAL
@@ -646,6 +654,9 @@ void
 DESTROY(self)
         Promise::ES6::XS::Backend::Deferred* self
     CODE:
+        if (self->promise->detect_leak_yn) {
+        }
+
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
 
