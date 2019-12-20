@@ -5,7 +5,7 @@
 
 #include "ppport.h"
 
-#define MY_CXT_KEY "AnyEvent::XSPromises::_guts" XS_VERSION
+#define MY_CXT_KEY "Promise::ES6::XS::_guts" XS_VERSION
 
 typedef struct xspr_callback_s xspr_callback_t;
 typedef struct xspr_promise_s xspr_promise_t;
@@ -104,16 +104,15 @@ typedef struct {
     int in_flush;
     int backend_scheduled;
     SV* conversion_helper;
-    SV* backend_fn;
 } my_cxt_t;
 
 typedef struct {
     xspr_promise_t* promise;
-} AnyEvent__XSPromises__Deferred;
+} Promise__ES6__XS__Backend__Deferred;
 
 typedef struct {
     xspr_promise_t* promise;
-} AnyEvent__XSPromises__Promise;
+} Promise__ES6__XS__Backend__Promise;
 
 START_MY_CXT
 
@@ -298,9 +297,7 @@ void xspr_queue_maybe_schedule(pTHX)
 
     MY_CXT.backend_scheduled = 1;
     /* We trust our backends to be sane, so little guarding against errors here */
-    dSP;
-    PUSHMARK(SP);
-    call_sv(MY_CXT.backend_fn, G_DISCARD|G_NOARGS);
+    xspr_queue_flush(aTHX);
 }
 
 /* Invoke the user's perl code. We need to be really sure this doesn't return early via croak/next/etc. */
@@ -509,9 +506,9 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
     }
 
     /* If we got one of our own promises: great, not much to do here! */
-    if (sv_derived_from(input, "AnyEvent::XSPromises::PromisePtr")) {
+    if (sv_derived_from(input, "Promise::ES6::XS::Backend::PromisePtr")) {
         IV tmp = SvIV((SV*)SvRV(input));
-        AnyEvent__XSPromises__Promise* promise = INT2PTR(AnyEvent__XSPromises__Promise*, tmp);
+        Promise__ES6__XS__Backend__Promise* promise = INT2PTR(Promise__ES6__XS__Backend__Promise*, tmp);
         xspr_promise_incref(aTHX_ promise->promise);
         return promise->promise;
     }
@@ -526,10 +523,10 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
             new_result->count == 1 &&
             new_result->result[0] != NULL &&
             SvROK(new_result->result[0]) &&
-            sv_derived_from(new_result->result[0], "AnyEvent::XSPromises::PromisePtr")) {
+            sv_derived_from(new_result->result[0], "Promise::ES6::XS::Backend::PromisePtr")) {
             /* This is expected: our conversion function returned us one of our own promises */
             IV tmp = SvIV((SV*)SvRV(new_result->result[0]));
-            AnyEvent__XSPromises__Promise* new_promise = INT2PTR(AnyEvent__XSPromises__Promise*, tmp);
+            Promise__ES6__XS__Backend__Promise* new_promise = INT2PTR(Promise__ES6__XS__Backend__Promise*, tmp);
 
             xspr_promise_t* promise = new_promise->promise;
             xspr_promise_incref(aTHX_ promise);
@@ -549,15 +546,16 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
     return NULL;
 }
 
+MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS
 
-MODULE = AnyEvent::XSPromises     PACKAGE = AnyEvent::XSPromises
+PROTOTYPES: DISABLE
 
-PROTOTYPES: ENABLE
+MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS::Backend
 
 TYPEMAP: <<EOT
 TYPEMAP
-AnyEvent::XSPromises::Deferred* T_PTROBJ
-AnyEvent::XSPromises::Promise* T_PTROBJ
+Promise::ES6::XS::Backend::Deferred* T_PTROBJ
+Promise::ES6::XS::Backend::Promise* T_PTROBJ
 EOT
 
 BOOT:
@@ -570,22 +568,16 @@ BOOT:
     MY_CXT.in_flush = 0;
     MY_CXT.backend_scheduled = 0;
     MY_CXT.conversion_helper = NULL;
-    MY_CXT.backend_fn = NULL;
 }
 
-AnyEvent::XSPromises::Deferred*
+Promise::ES6::XS::Backend::Deferred*
 deferred()
     CODE:
-        Newxz(RETVAL, 1, AnyEvent__XSPromises__Deferred);
+        Newxz(RETVAL, 1, Promise__ES6__XS__Backend__Deferred);
         xspr_promise_t* promise = xspr_promise_new(aTHX);
         RETVAL->promise = promise;
     OUTPUT:
         RETVAL
-
-void
-___flush()
-    CODE:
-        xspr_queue_flush(aTHX);
 
 void
 ___set_conversion_helper(helper)
@@ -596,23 +588,13 @@ ___set_conversion_helper(helper)
             croak("Refusing to set a conversion helper twice");
         MY_CXT.conversion_helper = newSVsv(helper);
 
-void
-___set_backend(backend)
-        SV* backend
-    CODE:
-        dMY_CXT;
-        if (MY_CXT.backend_fn != NULL)
-            croak("Refusing to set a backend twice");
-        MY_CXT.backend_fn = newSVsv(backend);
+MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS::Backend::DeferredPtr
 
-
-MODULE = AnyEvent::XSPromises     PACKAGE = AnyEvent::XSPromises::DeferredPtr
-
-AnyEvent::XSPromises::Promise*
+Promise::ES6::XS::Backend::Promise*
 promise(self)
-        AnyEvent::XSPromises::Deferred* self
+        Promise::ES6::XS::Backend::Deferred* self
     CODE:
-        Newxz(RETVAL, 1, AnyEvent__XSPromises__Promise);
+        Newxz(RETVAL, 1, Promise__ES6__XS__Backend__Promise);
         RETVAL->promise = self->promise;
         xspr_promise_incref(aTHX_ RETVAL->promise);
     OUTPUT:
@@ -620,7 +602,7 @@ promise(self)
 
 void
 resolve(self, ...)
-        AnyEvent::XSPromises::Deferred* self
+        Promise::ES6::XS::Backend::Deferred* self
     CODE:
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot resolve deferred: not pending");
@@ -637,7 +619,7 @@ resolve(self, ...)
 
 void
 reject(self, ...)
-        AnyEvent::XSPromises::Deferred* self
+        Promise::ES6::XS::Backend::Deferred* self
     CODE:
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot reject deferred: not pending");
@@ -654,7 +636,7 @@ reject(self, ...)
 
 bool
 is_in_progress(self)
-        AnyEvent::XSPromises::Deferred* self
+        Promise::ES6::XS::Backend::Deferred* self
     CODE:
         RETVAL = (self->promise->state == XSPR_STATE_PENDING);
     OUTPUT:
@@ -662,17 +644,17 @@ is_in_progress(self)
 
 void
 DESTROY(self)
-        AnyEvent::XSPromises::Deferred* self
+        Promise::ES6::XS::Backend::Deferred* self
     CODE:
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
 
 
-MODULE = AnyEvent::XSPromises     PACKAGE = AnyEvent::XSPromises::PromisePtr
+MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS::Backend::PromisePtr
 
 void
 then(self, ...)
-        AnyEvent::XSPromises::Promise* self
+        Promise::ES6::XS::Backend::Promise* self
     PPCODE:
         SV* on_resolve;
         SV* on_reject;
@@ -687,14 +669,14 @@ then(self, ...)
 
         /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
         if (GIMME_V != G_VOID) {
-            AnyEvent__XSPromises__Promise* next_promise;
-            Newxz(next_promise, 1, AnyEvent__XSPromises__Promise);
+            Promise__ES6__XS__Backend__Promise* next_promise;
+            Newxz(next_promise, 1, Promise__ES6__XS__Backend__Promise);
 
             next = xspr_promise_new(aTHX);
             next_promise->promise = next;
 
             ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), "AnyEvent::XSPromises::PromisePtr", (void*)next_promise);
+            sv_setref_pv(ST(0), "Promise::ES6::XS::Backend::PromisePtr", (void*)next_promise);
         }
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ on_resolve, on_reject, next);
@@ -705,21 +687,21 @@ then(self, ...)
 
 void
 catch(self, on_reject)
-        AnyEvent::XSPromises::Promise* self
+        Promise::ES6::XS::Backend::Promise* self
         SV* on_reject
     PPCODE:
         xspr_promise_t* next = NULL;
 
         /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
         if (GIMME_V != G_VOID) {
-            AnyEvent__XSPromises__Promise* next_promise;
-            Newxz(next_promise, 1, AnyEvent__XSPromises__Promise);
+            Promise__ES6__XS__Backend__Promise* next_promise;
+            Newxz(next_promise, 1, Promise__ES6__XS__Backend__Promise);
 
             next = xspr_promise_new(aTHX);
             next_promise->promise = next;
 
             ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), "AnyEvent::XSPromises::PromisePtr", (void*)next_promise);
+            sv_setref_pv(ST(0), "Promise::ES6::XS::Backend::PromisePtr", (void*)next_promise);
         }
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ &PL_sv_undef, on_reject, next);
@@ -730,21 +712,21 @@ catch(self, on_reject)
 
 void
 finally(self, on_finally)
-        AnyEvent::XSPromises::Promise* self
+        Promise::ES6::XS::Backend::Promise* self
         SV* on_finally
     PPCODE:
         xspr_promise_t* next = NULL;
 
         /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
         if (GIMME_V != G_VOID) {
-            AnyEvent__XSPromises__Promise* next_promise;
-            Newxz(next_promise, 1, AnyEvent__XSPromises__Promise);
+            Promise__ES6__XS__Backend__Promise* next_promise;
+            Newxz(next_promise, 1, Promise__ES6__XS__Backend__Promise);
 
             next = xspr_promise_new(aTHX);
             next_promise->promise = next;
 
             ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), "AnyEvent::XSPromises::PromisePtr", (void*)next_promise);
+            sv_setref_pv(ST(0), "Promise::ES6::XS::Backend::PromisePtr", (void*)next_promise);
         }
 
         xspr_callback_t* callback = xspr_callback_new_finally(aTHX_ on_finally, next);
@@ -755,7 +737,7 @@ finally(self, on_finally)
 
 void
 DESTROY(self)
-        AnyEvent::XSPromises::Promise* self
+        Promise::ES6::XS::Backend::Promise* self
     CODE:
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
