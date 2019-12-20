@@ -51,8 +51,7 @@ struct xspr_callback_s {
 
 struct xspr_result_s {
     xspr_result_state_t state;
-    SV** result;
-    int count;
+    SV* result;
     int refs;
 };
 
@@ -92,12 +91,12 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t *result);
 void xspr_promise_incref(pTHX_ xspr_promise_t* promise);
 void xspr_promise_decref(pTHX_ xspr_promise_t* promise);
 
-xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state, int count);
+xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state);
 xspr_result_t* xspr_result_from_error(pTHX_ const char *error);
 void xspr_result_incref(pTHX_ xspr_result_t* result);
 void xspr_result_decref(pTHX_ xspr_result_t* result);
 
-xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** input, int input_count);
+xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV* input);
 xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input);
 
 
@@ -143,14 +142,14 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
             xspr_result_t* result;
             result = xspr_invoke_perl(aTHX_
                                       callback_fn,
-                                      origin->finished.result->result,
-                                      origin->finished.result->count);
+                                      origin->finished.result->result
+                                      );
 
             if (callback->perl.next != NULL) {
                 int skip_passthrough = 0;
 
-                if (result->count == 1 && result->state == XSPR_RESULT_RESOLVED) {
-                    xspr_promise_t* promise = xspr_promise_from_sv(aTHX_ result->result[0]);
+                if (result->state == XSPR_RESULT_RESOLVED) {
+                    xspr_promise_t* promise = xspr_promise_from_sv(aTHX_ result->result);
                     if (promise != NULL && promise == callback->perl.next) {
                         /* This is an extreme corner case the A+ spec made us implement: we need to reject
                          * cases where the promise created from then() is passed back to its own callback */
@@ -190,8 +189,8 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
             xspr_result_t* result;
             result = xspr_invoke_perl(aTHX_
                                       callback_fn,
-                                      origin->finished.result->result,
-                                      origin->finished.result->count);
+                                      origin->finished.result->result
+                                      );
             xspr_result_decref(aTHX_ result);
         }
 
@@ -304,10 +303,10 @@ void xspr_queue_maybe_schedule(pTHX)
 }
 
 /* Invoke the user's perl code. We need to be really sure this doesn't return early via croak/next/etc. */
-xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** input, int input_count)
+xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV* input)
 {
     dSP;
-    int count, i;
+    int i;
     SV* error;
     xspr_result_t* result;
 
@@ -319,28 +318,24 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** input, int input_count)
     SAVETMPS;
 
     PUSHMARK(SP);
-    EXTEND(SP, input_count);
-    for (i = 0; i < input_count; i++) {
-        PUSHs(input[i]);
-    }
+    EXTEND(SP, 1);
+    PUSHs(input);
     PUTBACK;
 
     /* Clear $_ so that callbacks don't end up talking to each other by accident */
     SAVE_DEFSV;
     DEFSV_set(sv_newmortal());
 
-    count = call_sv(perl_fn, G_EVAL|G_ARRAY);
+    call_sv(perl_fn, G_EVAL|G_SCALAR);
 
     SPAGAIN;
     error = ERRSV;
     if (SvTRUE(error)) {
-        result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, 1);
-        result->result[0] = newSVsv(error);
+        result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED);
+        result->result = newSVsv(error);
     } else {
-        result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, count);
-        for (i = 0; i < count; i++) {
-            result->result[count-i-1] = SvREFCNT_inc(POPs);
-        }
+        result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED);
+        result->result = SvREFCNT_inc(POPs);
     }
     PUTBACK;
 
@@ -361,10 +356,7 @@ void xspr_result_decref(pTHX_ xspr_result_t* result)
 {
     if (--(result->refs) == 0) {
         int i;
-        for (i = 0; i < result->count; i++) {
-            SvREFCNT_dec(result->result[i]);
-        }
-        Safefree(result->result);
+        SvREFCNT_dec(result->result);
         Safefree(result);
     }
 }
@@ -388,21 +380,19 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
 }
 
 /* Create a new xspr_result_t object with the given number of item slots */
-xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state, int count)
+xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state)
 {
     xspr_result_t* result;
     Newxz(result, 1, xspr_result_t);
-    Newxz(result->result, count, SV*);
     result->state = state;
     result->refs = 1;
-    result->count = count;
     return result;
 }
 
 xspr_result_t* xspr_result_from_error(pTHX_ const char *error)
 {
-    xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, 1);
-    result->result[0] = newSVpv(error, 0);
+    xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED);
+    result->result = newSVpv(error, 0);
     return result;
 }
 
@@ -521,14 +511,13 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
     if (method_gv != NULL && isGV(method_gv) && GvCV(method_gv) != NULL) {
         dMY_CXT;
 
-        xspr_result_t* new_result = xspr_invoke_perl(aTHX_ MY_CXT.conversion_helper, &input, 1);
+        xspr_result_t* new_result = xspr_invoke_perl(aTHX_ MY_CXT.conversion_helper, input);
         if (new_result->state == XSPR_RESULT_RESOLVED &&
-            new_result->count == 1 &&
-            new_result->result[0] != NULL &&
-            SvROK(new_result->result[0]) &&
-            sv_derived_from(new_result->result[0], "Promise::ES6::XS::Backend::PromisePtr")) {
+            new_result->result != NULL &&
+            SvROK(new_result->result) &&
+            sv_derived_from(new_result->result, "Promise::ES6::XS::Backend::PromisePtr")) {
             /* This is expected: our conversion function returned us one of our own promises */
-            IV tmp = SvIV((SV*)SvRV(new_result->result[0]));
+            IV tmp = SvIV((SV*)SvRV(new_result->result));
             Promise__ES6__XS__Backend__Promise* new_promise = INT2PTR(Promise__ES6__XS__Backend__Promise*, tmp);
 
             xspr_promise_t* promise = new_promise->promise;
@@ -609,35 +598,31 @@ promise(self)
         RETVAL
 
 void
-resolve(self, ...)
+resolve(self, SV *value)
         Promise::ES6::XS::Backend::Deferred* self
     CODE:
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot resolve deferred: not pending");
         }
 
-        xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, items-1);
-        int i;
-        for (i = 0; i < items-1; i++) {
-            result->result[i] = newSVsv(ST(1+i));
-        }
+        xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED);
+        result->result = newSVsv(value);
+
         xspr_promise_finish(aTHX_ self->promise, result);
         xspr_result_decref(aTHX_ result);
         xspr_queue_maybe_schedule(aTHX);
 
 void
-reject(self, ...)
+reject(self, SV *reason)
         Promise::ES6::XS::Backend::Deferred* self
     CODE:
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot reject deferred: not pending");
         }
 
-        xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, items-1);
-        int i;
-        for (i = 0; i < items-1; i++) {
-            result->result[i] = newSVsv(ST(1+i));
-        }
+        xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED);
+        result->result = newSVsv(reason);
+
         xspr_promise_finish(aTHX_ self->promise, result);
         xspr_result_decref(aTHX_ result);
         xspr_queue_maybe_schedule(aTHX);
