@@ -9,14 +9,16 @@ require XSLoader;
 XSLoader::load('Promise::ES6::XS', $VERSION);
 
 Promise::ES6::XS::Backend::___set_conversion_helper(sub {
-    my $promise= shift;
+    my $thenable = shift;
     my $deferred= Promise::ES6::XS::Backend::deferred();
     my $called;
+#warn "====================== helper ($thenable)\n";
     eval {
-        $promise->then(sub {
+        $thenable->then(sub {
             return if $called++;
             $deferred->resolve(@_);
         }, sub {
+#warn "rejection: [$_[0]]\n";
             return if $called++;
             $deferred->reject(@_);
         });
@@ -27,6 +29,9 @@ Promise::ES6::XS::Backend::___set_conversion_helper(sub {
             $deferred->reject($error);
         }
     };
+
+    undef $thenable;
+#warn "=============== after thenable destroyed\n";
     return $deferred->promise;
 });
 

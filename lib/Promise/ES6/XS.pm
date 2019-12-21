@@ -34,14 +34,24 @@ in tandem with L<Promise::ES6::AnyEvent>.
 
 use Promise::ES6::XS::Loader ();
 
+our @ISA;
+BEGIN {
+#    @ISA = ('Promise::ES6::XS::Backend::PromisePtr');
+}
+
 use constant _BASE_PROMISE_CLASS => 'Promise::ES6';
+
+our $DETECT_MEMORY_LEAKS;
 
 sub new {
     my ($class, $cr) = @_;
 
     my $deferred = Promise::ES6::XS::Backend::deferred();
 
-    my $self = \($deferred->promise());
+    # 2nd el = warn on unhandled rejection
+    my $self = [ $deferred->promise() ];
+
+    my $soft_reject;
 
     my $ok = eval {
         $cr->(
@@ -57,11 +67,16 @@ sub new {
                     $deferred->resolve($_[0]);
                 }
             },
-            sub { $deferred->reject($_[0]) },
+            sub {
+                $deferred->reject($_[0]);
+                $soft_reject = 1;
+            },
         );
 
         1;
     };
+
+    $self->[1] = 1 if $soft_reject;
 
     if (!$ok) {
         $deferred->reject(my $err = $@);
@@ -73,7 +88,27 @@ sub new {
 sub then {
     my ($self, $on_res, $on_rej) = @_;
 
-    return bless \($$self->then( $on_res, $on_rej )), ref($self);
+#warn "in XS::then\n";
+#use Data::Dumper;
+#$Data::Dumper::Deparse = 1;
+#print Dumper( $self->[0]->can('then') );
+    my $new = bless [ $self->[0]->then( $on_res, $on_rej ) ], ref($self);
+#warn "end XS::then\n";
+    return $new;
+}
+
+sub DESTROY {
+    my ($self) = @_;
+
+    if (!$self->[1]) {
+        my $unhandled_rejection = $self->[0]->_unhandled_rejection();
+
+        if (defined $unhandled_rejection) {
+            warn "$self: Unhandled rejection: $unhandled_rejection";
+        }
+    }
+
+    return;
 }
 
 1;
