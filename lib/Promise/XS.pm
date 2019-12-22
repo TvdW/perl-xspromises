@@ -33,10 +33,8 @@ use Promise::XS::Loader ();
 
 our $DETECT_MEMORY_LEAKS;
 
-our @EXPORT_OK;
-BEGIN {
-    @EXPORT_OK = qw( deferred resolved rejected );
-}
+# convenience
+*deferred = *Promise::XS::Deferred::create;
 
 #sub new {
 #    my ($class, $cr) = @_;

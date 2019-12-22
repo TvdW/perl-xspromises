@@ -8,9 +8,7 @@ use Promise::XS qw/deferred resolved rejected collect/;
 use AnyEvent;
 my $cv= AE::cv;
 
-my $deferred= Promise::XS::Deferred::create();
-use Data::Dumper;
-print STDERR Dumper $deferred;
+my $deferred= Promise::XS::deferred();
 my $promise= $deferred->promise;
 is($deferred->is_pending, !!1);
 $deferred->resolve([1, 2, 3]);
@@ -34,8 +32,9 @@ print "second\n";
         654;
     })->then(sub {
 print "third\n";
-        is($_[0], 456);
-        is(0 + @_, 1);
+        is($_[0], 123);
+        is($_[1], 456);
+        is(0 + @_, 2);
         die "Does this work?";
     })->then(
         sub {
@@ -89,7 +88,10 @@ print "should reject\n";
 }
 $cv->recv;
 ok($any);
-# ok($next_ok);
+TODO: {
+    local $TODO = 'test disabled';
+    ok($next_ok, 'erroneous exit-via-next is caught and treated as a rejection');
+}
 ok($reached_end);
 ok($finally_called);
 
