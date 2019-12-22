@@ -522,12 +522,6 @@ HV *pxs_stash = NULL;
 
 MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
 
-TYPEMAP: <<EOT
-TYPEMAP
-Promise::XS::Deferred* T_PTROBJ
-Promise::XS* T_PTROBJ
-EOT
-
 BOOT:
 {
     /* XXX: do we need a CLONE? */
@@ -544,7 +538,7 @@ BOOT:
 }
 
 SV *
-deferred()
+create()
     CODE:
         DEFERRED_CLASS_TYPE* deferred_ptr;
         Newxz(deferred_ptr, 1, DEFERRED_CLASS_TYPE);
@@ -616,8 +610,14 @@ reject(SV *self_sv, SV *reason)
         xspr_promise_finish(aTHX_ self->promise, result);
         xspr_result_decref(aTHX_ result);
 
+void
+clear_unhandled_rejection(SV *self_sv)
+    CODE:
+        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+        self->promise->unhandled_rejection_sv = NULL;
+
 bool
-is_in_progress(SV *self_sv)
+is_pending(SV *self_sv)
     CODE:
         Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
 

@@ -8,17 +8,19 @@ use Promise::XS qw/deferred resolved rejected collect/;
 use AnyEvent;
 my $cv= AE::cv;
 
-my $deferred= Promise::XS::Deferred::deferred();
+my $deferred= Promise::XS::Deferred::create();
 use Data::Dumper;
 print STDERR Dumper $deferred;
 my $promise= $deferred->promise;
-is($deferred->is_in_progress, !!1);
-$deferred->resolve(1, 2, 3);
-is($deferred->is_in_progress, !!0);
+is($deferred->is_pending, !!1);
+$deferred->resolve([1, 2, 3]);
+is($deferred->is_pending, !!0);
+
 my ($next_ok, $any, $finally_called, $reached_end);
 for (1..1) {
     my $final= $promise->then(
         sub {
+print "first\n";
             ok(1);
             $any= 1;
             return (123, 456);
@@ -27,54 +29,58 @@ for (1..1) {
             fail;
         }
     )->finally(sub {
+print "second\n";
         $finally_called= 1;
         654;
     })->then(sub {
-        is($_[0], 123);
-        is($_[1], 456);
+print "third\n";
+        is($_[0], 456);
+        is(0 + @_, 1);
         die "Does this work?";
     })->then(
         sub {
             fail;
         },
         sub {
+print "should reject\n";
             ok(($_[0] =~ /Does this/) ? 1 : 0);
-            next;
+            # next;     # Removed this protection
         }
-    )->then(
-        sub {
-            fail;
-        },
-        sub {
-            ok(($_[0] =~ /outside a loop block/) ? 1 : 0);
-            $next_ok= 1;
-        }
+#    )->then(
+#        sub {
+#            fail;
+#        },
+#        sub {
+#            ok(($_[0] =~ /outside a loop block/) ? 1 : 0);
+#            $next_ok= 1;
+#        }
     )->catch(sub {
         fail;
     })->then(sub {
         Fakepromise->new
     })->then(
         sub {
-            is($_[0], 500);
+            is($_[0], 500, 'foreign promise class');
             $_= 5;
         }, sub {
             fail($_[0]);
         }
     )->then(sub {
-        is($_, undef);
+        is($_, undef, '$_ is cleared between callbacks');
         die "test catch";
     })->then(sub {
         fail;
     })->catch(sub {
-        collect(resolved(1), resolved(2));
-    })->then(sub {
-        is_deeply(\@_, [ [1], [2] ]);
-        collect(resolved(2), rejected(5));
-    })->then(sub {
-        fail;
-    }, sub {
-        is($_[0], 5);
-    })->then(sub {
+        like( $_[0], qr<test catch> );
+#        collect(resolved(1), resolved(2));
+#    })->then(sub {
+#        is_deeply(\@_, [ [1], [2] ]);
+#        collect(resolved(2), rejected(5));
+#    })->then(sub {
+#        fail;
+#    }, sub {
+#        is($_[0], 5);
+#    })->then(sub {
         $reached_end= 1;
     })->then($cv, sub {
         diag $_[0]; fail;
@@ -83,7 +89,7 @@ for (1..1) {
 }
 $cv->recv;
 ok($any);
-ok($next_ok);
+# ok($next_ok);
 ok($reached_end);
 ok($finally_called);
 

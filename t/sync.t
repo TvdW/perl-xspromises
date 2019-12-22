@@ -10,7 +10,7 @@ use Promise::XS;
 
 my $val;
 
-my $deferred = Promise::XS::Deferred::deferred();
+my $deferred = Promise::XS::Deferred::create();
 $deferred->resolve(42);
 
 $deferred->promise()->then(

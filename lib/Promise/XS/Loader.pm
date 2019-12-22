@@ -10,7 +10,7 @@ XSLoader::load('Promise::XS', $VERSION);
 
 sub _convert_to_our_promise {
     my $thenable = shift;
-    my $deferred= Promise::XS::Deferred::deferred();
+    my $deferred= Promise::XS::Deferred::create();
     my $called;
 #warn "====================== helper ($thenable)\n";
     eval {
