@@ -3,10 +3,10 @@ use ExtUtils::MakeMaker;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
 WriteMakefile(
-    NAME              => 'Promise::ES6::XS',
-    VERSION_FROM      => 'lib/Promise/ES6/XS/Loader.pm', # finds $VERSION
+    NAME              => 'Promise::XS',
+    VERSION_FROM      => 'lib/Promise/XS/Loader.pm', # finds $VERSION
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-      (ABSTRACT_FROM  => 'lib/Promise/ES6/XS.pm', # retrieve abstract from module
+      (ABSTRACT_FROM  => 'lib/Promise/XS.pm', # retrieve abstract from module
        AUTHOR         => [
             'Felipe Gasper (FELIPE)',
             'Tom van der Woerdt <tomvanderwoerdt@sd.apple.com>',

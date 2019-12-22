@@ -3,12 +3,14 @@ use strict;
 use warnings;
 
 use Test::More;
-use AnyEvent;
-use AnyEvent::XSPromises qw/deferred resolved rejected collect/;
+use Promise::XS qw/deferred resolved rejected collect/;
 
+use AnyEvent;
 my $cv= AE::cv;
 
-my $deferred= deferred;
+my $deferred= Promise::XS::Deferred::deferred();
+use Data::Dumper;
+print STDERR Dumper $deferred;
 my $promise= $deferred->promise;
 is($deferred->is_in_progress, !!1);
 $deferred->resolve(1, 2, 3);

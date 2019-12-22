@@ -6,11 +6,14 @@ use warnings;
 use Test::More;
 use Test::FailWarnings;
 
-use Promise::ES6::XS;
+use Promise::XS;
 
 my $val;
 
-Promise::ES6::XS->new( sub { $_[0]->(42) } )->then(
+my $deferred = Promise::XS::Deferred::deferred();
+$deferred->resolve(42);
+
+$deferred->promise()->then(
     sub { $val = shift },
 );
 

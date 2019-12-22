@@ -1,4 +1,4 @@
-package Promise::ES6::XS::Loader;
+package Promise::XS::Loader;
 
 use strict;
 use warnings;
@@ -6,11 +6,11 @@ use warnings;
 our $VERSION = '0.001';
 
 require XSLoader;
-XSLoader::load('Promise::ES6::XS', $VERSION);
+XSLoader::load('Promise::XS', $VERSION);
 
-Promise::ES6::XS::Backend::___set_conversion_helper(sub {
+sub _convert_to_our_promise {
     my $thenable = shift;
-    my $deferred= Promise::ES6::XS::Backend::deferred();
+    my $deferred= Promise::XS::Deferred::deferred();
     my $called;
 #warn "====================== helper ($thenable)\n";
     eval {
@@ -33,6 +33,10 @@ Promise::ES6::XS::Backend::___set_conversion_helper(sub {
     undef $thenable;
 #warn "=============== after thenable destroyed\n";
     return $deferred->promise;
-});
+}
+
+Promise::XS::Deferred::___set_conversion_helper(
+    \&_convert_to_our_promise,
+);
 
 1;

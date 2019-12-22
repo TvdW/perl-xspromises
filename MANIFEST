@@ -2,8 +2,8 @@ Changes
 MANIFEST
 Makefile.PL
 XS.xs
-lib/Promise/ES6/XS.pm
-lib/Promise/ES6/XS/Loader.pm
+lib/Promise/XS.pm
+lib/Promise/XS/Loader.pm
 ppport.h
 t/XSPromises.t
 t/aplus.t

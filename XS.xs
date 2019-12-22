@@ -7,7 +7,13 @@
 
 #include <stdbool.h>
 
-#define MY_CXT_KEY "Promise::ES6::XS::_guts" XS_VERSION
+#define MY_CXT_KEY "Promise::XS::_guts" XS_VERSION
+
+#define PROMISE_CLASS "Promise::XS"
+#define PROMISE_CLASS_TYPE Promise__XS
+
+#define DEFERRED_CLASS "Promise::XS::Deferred"
+#define DEFERRED_CLASS_TYPE Promise__XS__Deferred
 
 typedef struct xspr_callback_s xspr_callback_t;
 typedef struct xspr_promise_s xspr_promise_t;
@@ -77,10 +83,6 @@ struct xspr_callback_queue_s {
     xspr_callback_queue_t* next;
 };
 
-void xspr_queue_flush(pTHX);
-void xspr_queue_add(pTHX_ xspr_callback_t* callback, xspr_promise_t* origin);
-void xspr_queue_maybe_schedule(pTHX);
-
 xspr_callback_t* xspr_callback_new_perl(pTHX_ SV* on_resolve, SV* on_reject, xspr_promise_t* next);
 xspr_callback_t* xspr_callback_new_chain(pTHX_ xspr_promise_t* chain);
 void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* origin);
@@ -111,11 +113,11 @@ typedef struct {
 
 typedef struct {
     xspr_promise_t* promise;
-} Promise__ES6__XS__Backend__Deferred;
+} DEFERRED_CLASS_TYPE;
 
 typedef struct {
     xspr_promise_t* promise;
-} Promise__ES6__XS__Backend__Promise;
+} PROMISE_CLASS_TYPE;
 
 START_MY_CXT
 
@@ -242,93 +244,6 @@ void xspr_callback_free(pTHX_ xspr_callback_t *callback)
     Safefree(callback);
 }
 
-/* Process the queue until it's empty */
-void xspr_queue_flush(pTHX)
-{
-    dMY_CXT;
-
-    if (MY_CXT.in_flush) {
-        /* XXX: is there a reasonable way to trigger this? */
-        warn("Rejecting request to flush promises queue: already processing");
-        return;
-    }
-    MY_CXT.in_flush = 1;
-//fprintf(stderr, "FLUSHING\n");
-
-    while (MY_CXT.queue_head != NULL) {
-        /* Save some typing... */
-        xspr_callback_queue_t *cur = MY_CXT.queue_head;
-
-        if (cur->origin->unhandled_rejection_sv) {
-            cur->origin->unhandled_rejection_sv = NULL;
-        }
-
-        /* Process the callback. This could trigger some Perl code, meaning we
-         * could end up with additional queue entries after this */
-//fprintf(stderr, "FLUSHING - calling callback\n");
-        xspr_callback_process(aTHX_ cur->callback, cur->origin);
-//fprintf(stderr, "FLUSHING - calling callback DONE\n");
-
-        /* Free-ing the callback structure could theoretically trigger DESTROY subs,
-         * enqueueing new callbacks, so we can't assume the loop ends here! */
-        MY_CXT.queue_head = cur->next;
-        if (cur->next == NULL) {
-            MY_CXT.queue_tail = NULL;
-        }
-
-        /* Destroy the structure */
-        xspr_callback_free(aTHX_ cur->callback);
-        xspr_promise_decref(aTHX_ cur->origin);
-        Safefree(cur);
-    }
-
-    MY_CXT.in_flush = 0;
-    MY_CXT.backend_scheduled = 0;
-//fprintf(stderr, "reset MY_CXT.backend_scheduled\n");
-}
-
-/* Add a callback invocation into the queue for the given origin promise.
- * Takes ownership of the callback structure */
-void xspr_queue_add(pTHX_ xspr_callback_t* callback, xspr_promise_t* origin)
-{
-    dMY_CXT;
-
-    xspr_callback_queue_t* entry;
-    Newxz(entry, 1, xspr_callback_queue_t);
-    entry->origin = origin;
-    xspr_promise_incref(aTHX_ entry->origin);
-    entry->callback = callback;
-
-    if (MY_CXT.queue_head == NULL) {
-        assert(MY_CXT.queue_tail == NULL);
-        /* Empty queue, so now it's just us */
-        MY_CXT.queue_head = entry;
-        MY_CXT.queue_tail = entry;
-
-    } else {
-        assert(MY_CXT.queue_tail != NULL);
-        /* Existing queue, add to the tail */
-        MY_CXT.queue_tail->next = entry;
-        MY_CXT.queue_tail = entry;
-    }
-}
-
-void xspr_queue_maybe_schedule(pTHX)
-{
-    dMY_CXT;
-    if (MY_CXT.queue_head == NULL || MY_CXT.backend_scheduled || MY_CXT.in_flush) {
-//if (MY_CXT.queue_head == NULL) fprintf(stderr, "schedule ABORT - no queue head\n");
-//if (MY_CXT.backend_scheduled) fprintf(stderr, "schedule ABORT - backend_scheduled\n");
-//if (MY_CXT.in_flush) fprintf(stderr, "schedule ABORT - in_flush\n");
-        return;
-    }
-//fprintf(stderr, "scheduling backend\n");
-
-    MY_CXT.backend_scheduled = 1;
-    /* We trust our backends to be sane, so little guarding against errors here */
-    xspr_queue_flush(aTHX);
-}
-
 /* Invoke the user's perl code. We need to be really sure this doesn't return early via croak/next/etc. */
 xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV* input)
 {
@@ -389,12 +304,10 @@ void xspr_result_decref(pTHX_ xspr_result_t* result)
 
 void xspr_immediate_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* promise)
 {
-    //fprintf(stderr, "IMMEDIATE PROCESS\n");
     xspr_callback_process(aTHX_ callback, promise);
 
     /* Destroy the structure */
     xspr_callback_free(aTHX_ callback);
-    // xspr_promise_decref(aTHX_ promise);
 }
 
 /* Transitions a promise from pending to finished, using the given result */
@@ -414,10 +327,8 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
 
     int i;
     for (i = 0; i < count; i++) {
-        //xspr_queue_add(aTHX_ pending_callbacks[i], promise);
         xspr_immediate_process(aTHX_ pending_callbacks[i], promise);
     }
-    // xspr_queue_maybe_schedule(aTHX);
     Safefree(pending_callbacks);
 }
 
@@ -529,8 +440,6 @@ void xspr_promise_then(pTHX_ xspr_promise_t* promise, xspr_callback_t* callback)
 
     } else if (promise->state == XSPR_STATE_FINISHED) {
 //fprintf(stderr, "then(): state == FINISHED\n");
-        //xspr_queue_add(aTHX_ callback, promise);
-        //xspr_queue_maybe_schedule(aTHX);
 
         xspr_immediate_process(aTHX_ callback, promise);
     } else {
@@ -547,10 +456,9 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
     }
 
     /* If we got one of our own promises: great, not much to do here! */
-    if (sv_derived_from(input, "Promise::ES6::XS::Backend::PromisePtr")) {
-printf("Got one of our own\n");
+    if (sv_derived_from(input, PROMISE_CLASS)) {
         IV tmp = SvIV((SV*)SvRV(input));
-        Promise__ES6__XS__Backend__Promise* promise = INT2PTR(Promise__ES6__XS__Backend__Promise*, tmp);
+        PROMISE_CLASS_TYPE* promise = INT2PTR(PROMISE_CLASS_TYPE*, tmp);
         xspr_promise_incref(aTHX_ promise->promise);
         return promise->promise;
     }
@@ -558,18 +466,16 @@ printf("Got one of our own\n");
     /* Maybe we got another type of promise. Let's convert it */
     GV* method_gv = gv_fetchmethod_autoload(SvSTASH(SvRV(input)), "then", FALSE);
     if (method_gv != NULL && isGV(method_gv) && GvCV(method_gv) != NULL) {
-printf("Got a different promise\n");
         dMY_CXT;
 
         xspr_result_t* new_result = xspr_invoke_perl(aTHX_ MY_CXT.conversion_helper, input);
-printf("ran conversion\n");
         if (new_result->state == XSPR_RESULT_RESOLVED &&
             new_result->result != NULL &&
             SvROK(new_result->result) &&
-            sv_derived_from(new_result->result, "Promise::ES6::XS::Backend::PromisePtr")) {
+            sv_derived_from(new_result->result, PROMISE_CLASS)) {
             /* This is expected: our conversion function returned us one of our own promises */
             IV tmp = SvIV((SV*)SvRV(new_result->result));
-            Promise__ES6__XS__Backend__Promise* new_promise = INT2PTR(Promise__ES6__XS__Backend__Promise*, tmp);
+            PROMISE_CLASS_TYPE* new_promise = INT2PTR(PROMISE_CLASS_TYPE*, tmp);
 
             xspr_promise_t* promise = new_promise->promise;
             xspr_promise_incref(aTHX_ promise);
@@ -591,16 +497,35 @@ printf("Got a different promise 2\n");
     return NULL;
 }
 
-MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS
+Promise__XS__Deferred* _get_deferred_from_sv(pTHX_ SV *self_sv) {
+    SV *referent = SvRV(self_sv);
+    return (Promise__XS__Deferred *) SvUV(referent);
+}
 
-PROTOTYPES: DISABLE
+Promise__XS* _get_promise_from_sv(pTHX_ SV *self_sv) {
+    SV *referent = SvRV(self_sv);
+    return (Promise__XS *) SvUV(referent);
+}
 
-MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS::Backend
+SV* _ptr_to_svrv(pTHX_ void* ptr, HV* stash) {
+    SV* referent = newSVuv( (const UV)(ptr) );
+    SV* retval = newRV_inc(referent);
+    sv_bless(retval, stash);
+
+    return retval;
+}
+
+HV *pxs_deferred_stash = NULL;
+HV *pxs_stash = NULL;
+
+//----------------------------------------------------------------------
+
+MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
 
 TYPEMAP: <<EOT
 TYPEMAP
-Promise::ES6::XS::Backend::Deferred* T_PTROBJ
-Promise::ES6::XS::Backend::Promise* T_PTROBJ
+Promise::XS::Deferred* T_PTROBJ
+Promise::XS* T_PTROBJ
 EOT
 
 BOOT:
@@ -613,19 +538,26 @@ BOOT:
     MY_CXT.in_flush = 0;
     MY_CXT.backend_scheduled = 0;
     MY_CXT.conversion_helper = NULL;
+
+    pxs_stash = gv_stashpv(PROMISE_CLASS, FALSE);
+    pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
 }
 
-Promise::ES6::XS::Backend::Deferred*
+SV *
 deferred()
     CODE:
-        Newxz(RETVAL, 1, Promise__ES6__XS__Backend__Deferred);
+        DEFERRED_CLASS_TYPE* deferred_ptr;
+        Newxz(deferred_ptr, 1, DEFERRED_CLASS_TYPE);
+
         xspr_promise_t* promise = xspr_promise_new(aTHX);
 
-        SV *detect_leak_perl = get_sv("Promise::ES6::DETECT_MEMORY_LEAKS", 0);
+        SV *detect_leak_perl = get_sv("Promise::XS::DETECT_MEMORY_LEAKS", 0);
 
         promise->detect_leak_yn = detect_leak_perl && SvTRUE(detect_leak_perl);
 
-        RETVAL->promise = promise;
+        deferred_ptr->promise = promise;
+
+        RETVAL = _ptr_to_svrv(aTHX_ deferred_ptr, pxs_deferred_stash);
     OUTPUT:
         RETVAL
 
@@ -638,22 +570,27 @@ ___set_conversion_helper(helper)
             croak("Refusing to set a conversion helper twice");
         MY_CXT.conversion_helper = newSVsv(helper);
 
-MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS::Backend::DeferredPtr
+MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
 
-Promise::ES6::XS::Backend::Promise*
-promise(self)
-        Promise::ES6::XS::Backend::Deferred* self
+SV*
+promise(SV* self_sv)
     CODE:
-        Newxz(RETVAL, 1, Promise__ES6__XS__Backend__Promise);
-        RETVAL->promise = self->promise;
-        xspr_promise_incref(aTHX_ RETVAL->promise);
+        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+
+        Promise__XS* promise_ptr;
+        Newxz(promise_ptr, 1, PROMISE_CLASS_TYPE);
+        promise_ptr->promise = self->promise;
+        xspr_promise_incref(aTHX_ promise_ptr->promise);
+
+        RETVAL = _ptr_to_svrv(aTHX_ promise_ptr, pxs_stash);
     OUTPUT:
         RETVAL
 
 void
-resolve(self, SV *value)
-        Promise::ES6::XS::Backend::Deferred* self
+resolve(SV *self_sv, SV *value)
     CODE:
+        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot resolve deferred: not pending");
         }
@@ -663,12 +600,12 @@ resolve(self, SV *value)
 
         xspr_promise_finish(aTHX_ self->promise, result);
         xspr_result_decref(aTHX_ result);
-        // xspr_queue_maybe_schedule(aTHX);
 
 void
-reject(self, SV *reason)
-        Promise::ES6::XS::Backend::Deferred* self
+reject(SV *self_sv, SV *reason)
     CODE:
+        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot reject deferred: not pending");
         }
@@ -678,20 +615,21 @@ reject(self, SV *reason)
 
         xspr_promise_finish(aTHX_ self->promise, result);
         xspr_result_decref(aTHX_ result);
-        // xspr_queue_maybe_schedule(aTHX);
 
 bool
-is_in_progress(self)
-        Promise::ES6::XS::Backend::Deferred* self
+is_in_progress(SV *self_sv)
     CODE:
+        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+
         RETVAL = (self->promise->state == XSPR_STATE_PENDING);
     OUTPUT:
         RETVAL
 
 void
-DESTROY(self)
-        Promise::ES6::XS::Backend::Deferred* self
+DESTROY(SV *self_sv)
     CODE:
+        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+
         if (self->promise->detect_leak_yn) {
         }
 
@@ -699,12 +637,13 @@ DESTROY(self)
         Safefree(self);
 
 
-MODULE = Promise::ES6::XS     PACKAGE = Promise::ES6::XS::Backend::PromisePtr
+MODULE = Promise::XS     PACKAGE = Promise::XS
 
 void
-then(self, ...)
-        Promise::ES6::XS::Backend::Promise* self
+then(SV* self_sv, ...)
     PPCODE:
+        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+
         //fprintf(stderr, "in PPCODE\n");
         SV* on_resolve;
         SV* on_reject;
@@ -719,92 +658,88 @@ then(self, ...)
 
         /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
         if (GIMME_V != G_VOID) {
-            Promise__ES6__XS__Backend__Promise* next_promise;
-            Newxz(next_promise, 1, Promise__ES6__XS__Backend__Promise);
+            PROMISE_CLASS_TYPE* next_promise;
+            Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
 
             next = xspr_promise_new(aTHX);
             next_promise->promise = next;
 
             ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), "Promise::ES6::XS::Backend::PromisePtr", (void*)next_promise);
+            sv_setref_pv(ST(0), PROMISE_CLASS, (void*)next_promise);
         }
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ on_resolve, on_reject, next);
         xspr_promise_then(aTHX_ self->promise, callback);
-        // xspr_queue_maybe_schedule(aTHX);
         //fprintf(stderr, "end PPCODE\n");
 
         XSRETURN(1);
 
 void
-catch(self, on_reject)
-        Promise::ES6::XS::Backend::Promise* self
-        SV* on_reject
+catch(SV* self_sv, SV* on_reject)
     PPCODE:
+        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+
         xspr_promise_t* next = NULL;
 
         /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
         if (GIMME_V != G_VOID) {
-            Promise__ES6__XS__Backend__Promise* next_promise;
-            Newxz(next_promise, 1, Promise__ES6__XS__Backend__Promise);
+            PROMISE_CLASS_TYPE* next_promise;
+            Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
 
             next = xspr_promise_new(aTHX);
             next_promise->promise = next;
 
             ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), "Promise::ES6::XS::Backend::PromisePtr", (void*)next_promise);
+            sv_setref_pv(ST(0), PROMISE_CLASS, (void*)next_promise);
         }
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ &PL_sv_undef, on_reject, next);
         xspr_promise_then(aTHX_ self->promise, callback);
-        // xspr_queue_maybe_schedule(aTHX);
 
         XSRETURN(1);
 
 void
-finally(self, on_finally)
-        Promise::ES6::XS::Backend::Promise* self
-        SV* on_finally
+finally(SV* self_sv, SV* on_finally)
     PPCODE:
+        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+
         xspr_promise_t* next = NULL;
 
         /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
         if (GIMME_V != G_VOID) {
-            Promise__ES6__XS__Backend__Promise* next_promise;
-            Newxz(next_promise, 1, Promise__ES6__XS__Backend__Promise);
+            PROMISE_CLASS_TYPE* next_promise;
+            Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
 
             next = xspr_promise_new(aTHX);
             next_promise->promise = next;
 
             ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), "Promise::ES6::XS::Backend::PromisePtr", (void*)next_promise);
+            sv_setref_pv(ST(0), PROMISE_CLASS, (void*)next_promise);
         }
 
         xspr_callback_t* callback = xspr_callback_new_finally(aTHX_ on_finally, next);
         xspr_promise_then(aTHX_ self->promise, callback);
-        // xspr_queue_maybe_schedule(aTHX);
 
         XSRETURN(1);
 
 SV *
-_unhandled_rejection(self)
-        Promise::ES6::XS::Backend::Promise* self
+_unhandled_rejection_sr(SV* self_sv)
     CODE:
+        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+
         if (self->promise->unhandled_rejection_sv) {
-            RETVAL = newSVsv( self->promise->unhandled_rejection_sv );
+            RETVAL = newRV_inc( newSVsv( self->promise->unhandled_rejection_sv ) );
+        }
+        else {
+            RETVAL = NULL;
         }
     OUTPUT:
         RETVAL
 
 void
-DESTROY(self)
-        Promise::ES6::XS::Backend::Promise* self
+DESTROY(SV* self_sv)
     CODE:
-        //if (self->promise->unhandled_rejection_sv) {
-        //    fprintf(stderr, "DESTROY promiseptr\n");
-        //    sv_dump(self->promise->unhandled_rejection_sv);
-        //}
-        self->promise->unhandled_rejection_sv = NULL;
+        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
 
