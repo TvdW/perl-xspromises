@@ -5,9 +5,9 @@ use warnings;
 
 use AnyEvent ();
 
-sub set_backend_AnyEvent() {
-    ___set_deferral_backend_generic(
-        AnyEvent->can('postpone'),
+sub set_deferral_AnyEvent() {
+    ___set_deferral_generic(
+        \&AnyEvent::postpone,
     );
 }
 

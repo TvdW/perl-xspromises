@@ -711,7 +711,7 @@ create()
         RETVAL
 
 void
-___set_deferral_backend_generic(SV* cr)
+___set_deferral_generic(SV* cr)
     CODE:
         dMY_CXT;
 
