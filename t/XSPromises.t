@@ -18,7 +18,6 @@ my ($next_ok, $any, $finally_called, $reached_end);
 for (1..1) {
     my $final= $promise->then(
         sub {
-print "first\n";
             ok(1);
             $any= 1;
             return (123, 456);
@@ -27,11 +26,9 @@ print "first\n";
             fail;
         }
     )->finally(sub {
-print "second\n";
         $finally_called= 1;
         654;
     })->then(sub {
-print "third\n";
         is($_[0], 123);
         is($_[1], 456);
         is(0 + @_, 2);
@@ -41,7 +38,6 @@ print "third\n";
             fail;
         },
         sub {
-print "should reject\n";
             ok(($_[0] =~ /Does this/) ? 1 : 0);
             # next;     # Removed this protection
         }

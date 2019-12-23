@@ -5,7 +5,7 @@ use warnings;
 
 =head1 NAME
 
-Promise::XS - Fast ES6 promises
+Promise::XS - Fast promises
 
 =head1 SYNOPSIS
 
@@ -30,8 +30,25 @@ in tandem with L<Promise::XS::AnyEvent>.
 =cut
 
 use Promise::XS::Loader ();
+use Promise::XS::Deferred ();
 
 our $DETECT_MEMORY_LEAKS;
+
+sub import {
+    my ($class, %args) = @_;
+use Data::Dumper;
+print STDERR Dumper( \@_, \%args );
+
+    if (my $backend = $args{'backend'}) {
+
+        if ($backend eq 'AnyEvent') {
+            Promise::XS::Deferred::set_backend_AnyEvent();
+        }
+        else {
+            die( __PACKAGE__ . ": unknown backend: $backend" );
+        }
+    }
+}
 
 # convenience
 *deferred = *Promise::XS::Deferred::create;

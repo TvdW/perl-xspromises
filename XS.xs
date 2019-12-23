@@ -110,6 +110,10 @@ typedef struct {
     int in_flush;
     int backend_scheduled;
     SV* conversion_helper;
+    SV* pxs_flush_cr;
+    HV* pxs_stash;
+    HV* pxs_deferred_stash;
+    SV* deferral_cr;
 } my_cxt_t;
 
 typedef struct {
@@ -247,6 +251,115 @@ void xspr_callback_free(pTHX_ xspr_callback_t *callback)
     Safefree(callback);
 }
 
+/* Process the queue until it's empty */
+void xspr_queue_flush(pTHX)
+{
+    dMY_CXT;
+
+    if (MY_CXT.in_flush) {
+        /* XXX: is there a reasonable way to trigger this? */
+        warn("Rejecting request to flush promises queue: already processing");
+        return;
+    }
+    MY_CXT.in_flush = 1;
+
+    while (MY_CXT.queue_head != NULL) {
+        /* Save some typing... */
+        xspr_callback_queue_t *cur = MY_CXT.queue_head;
+
+        /* Process the callback. This could trigger some Perl code, meaning we
+         * could end up with additional queue entries after this */
+        xspr_callback_process(aTHX_ cur->callback, cur->origin);
+
+        /* Free-ing the callback structure could theoretically trigger DESTROY subs,
+         * enqueueing new callbacks, so we can't assume the loop ends here! */
+        MY_CXT.queue_head = cur->next;
+        if (cur->next == NULL) {
+            MY_CXT.queue_tail = NULL;
+        }
+
+        /* Destroy the structure */
+        xspr_callback_free(aTHX_ cur->callback);
+        xspr_promise_decref(aTHX_ cur->origin);
+        Safefree(cur);
+    }
+
+    MY_CXT.in_flush = 0;
+    MY_CXT.backend_scheduled = 0;
+}
+
+/* Add a callback invocation into the queue for the given origin promise.
+ * Takes ownership of the callback structure */
+void xspr_queue_add(pTHX_ xspr_callback_t* callback, xspr_promise_t* origin)
+{
+    dMY_CXT;
+
+    xspr_callback_queue_t* entry;
+    Newxz(entry, 1, xspr_callback_queue_t);
+    entry->origin = origin;
+    xspr_promise_incref(aTHX_ entry->origin);
+    entry->callback = callback;
+
+    if (MY_CXT.queue_head == NULL) {
+        assert(MY_CXT.queue_tail == NULL);
+        /* Empty queue, so now it's just us */
+        MY_CXT.queue_head = entry;
+        MY_CXT.queue_tail = entry;
+
+    } else {
+        assert(MY_CXT.queue_tail != NULL);
+        /* Existing queue, add to the tail */
+        MY_CXT.queue_tail->next = entry;
+        MY_CXT.queue_tail = entry;
+    }
+}
+
+void _call_with_argument( pTHX_ SV* cb, SV* arg ) {
+    // --- Almost all copy-paste from “perlcall” … blegh!
+    dSP;
+
+    ENTER;
+    SAVETMPS;
+
+    PUSHMARK(SP);
+    EXTEND(SP, 1);
+
+    //PUSHs( sv_2mortal(arg) );
+    PUSHs( arg );
+    PUTBACK;
+
+    call_sv(cb, G_VOID);
+
+    FREETMPS;
+    LEAVE;
+
+    return;
+}
+
+void xspr_queue_maybe_schedule(pTHX)
+{
+    dMY_CXT;
+    if (MY_CXT.queue_head == NULL || MY_CXT.backend_scheduled || MY_CXT.in_flush) {
+        return;
+    }
+
+    MY_CXT.backend_scheduled = 1;
+    /* We trust our backends to be sane, so little guarding against errors here */
+
+    if (!MY_CXT.pxs_flush_cr) {
+        HV *stash = gv_stashpv(DEFERRED_CLASS, 0);
+        GV* method_gv = gv_fetchmethod_autoload(stash, "___flush", FALSE);
+        if (method_gv != NULL && isGV(method_gv) && GvCV(method_gv) != NULL) {
+            MY_CXT.pxs_flush_cr = newRV_inc( (SV*)GvCV(method_gv) );
+        }
+        else {
+            assert(0);
+        }
+    }
+
+    _call_with_argument(aTHX_ MY_CXT.deferral_cr, MY_CXT.pxs_flush_cr);
+}
+
 /* Invoke the user's perl code. We need to be really sure this doesn't return early via croak/next/etc. */
 xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_count)
 {
@@ -324,6 +437,8 @@ void xspr_immediate_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* pro
 /* Transitions a promise from pending to finished, using the given result */
 void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
 {
+    dMY_CXT;
+
     assert(promise->state == XSPR_STATE_PENDING);
     xspr_callback_t** pending_callbacks = promise->pending.callbacks;
     int count = promise->pending.callbacks_count;
@@ -338,8 +453,20 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
 
     unsigned i;
     for (i = 0; i < count; i++) {
-        xspr_immediate_process(aTHX_ pending_callbacks[i], promise);
+        if (MY_CXT.deferral_cr) {
+fprintf(stderr, "defer mode - finish/add\n");
+            xspr_queue_add(aTHX_ pending_callbacks[i], promise);
+        }
+        else {
+fprintf(stderr, "immediate mode - finish/add\n");
+            xspr_immediate_process(aTHX_ pending_callbacks[i], promise);
+        }
     }
+
+    if (MY_CXT.deferral_cr) {
+        xspr_queue_maybe_schedule(aTHX);
+    }
+
     Safefree(pending_callbacks);
 }
 
@@ -445,16 +572,27 @@ xspr_callback_t* xspr_callback_new_chain(pTHX_ xspr_promise_t* chain)
 /* Adds a then to the promise. Takes ownership of the callback */
 void xspr_promise_then(pTHX_ xspr_promise_t* promise, xspr_callback_t* callback)
 {
-//warn("start xspr_promise_then\n");
+    dMY_CXT;
+
+warn("start xspr_promise_then\n");
     if (promise->state == XSPR_STATE_PENDING) {
+fprintf(stderr, "then(): state == PENDING\n");
         promise->pending.callbacks_count++;
         Renew(promise->pending.callbacks, promise->pending.callbacks_count, xspr_callback_t*);
         promise->pending.callbacks[promise->pending.callbacks_count-1] = callback;
 
     } else if (promise->state == XSPR_STATE_FINISHED) {
-//fprintf(stderr, "then(): state == FINISHED\n");
+fprintf(stderr, "then(): state == FINISHED\n");
 
-        xspr_immediate_process(aTHX_ callback, promise);
+        if (MY_CXT.deferral_cr) {
+fprintf(stderr, "defer mode - then/add\n");
+            xspr_queue_add(aTHX_ callback, promise);
+            xspr_queue_maybe_schedule(aTHX);
+        }
+        else {
+fprintf(stderr, "immediate mode - then/add\n");
+            xspr_immediate_process(aTHX_ callback, promise);
+        }
     } else {
         assert(0);
     }
@@ -529,9 +667,6 @@ SV* _ptr_to_svrv(pTHX_ void* ptr, HV* stash) {
     return retval;
 }
 
-HV *pxs_deferred_stash = NULL;
-HV *pxs_stash = NULL;
-
 //----------------------------------------------------------------------
 
 MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
@@ -547,13 +682,19 @@ BOOT:
     MY_CXT.backend_scheduled = 0;
     MY_CXT.conversion_helper = NULL;
 
-    pxs_stash = gv_stashpv(PROMISE_CLASS, FALSE);
-    pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
+    MY_CXT.pxs_stash = gv_stashpv(PROMISE_CLASS, FALSE);
+    MY_CXT.pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
+
+    fprintf(stderr, "initializing deferral\n");
+    MY_CXT.deferral_cr = NULL;
+    MY_CXT.pxs_flush_cr = NULL;
 }
 
 SV *
 create()
     CODE:
+        dMY_CXT;
+
         DEFERRED_CLASS_TYPE* deferred_ptr;
         Newxz(deferred_ptr, 1, DEFERRED_CLASS_TYPE);
 
@@ -565,9 +706,31 @@ create()
 
         deferred_ptr->promise = promise;
 
-        RETVAL = _ptr_to_svrv(aTHX_ deferred_ptr, pxs_deferred_stash);
+        RETVAL = _ptr_to_svrv(aTHX_ deferred_ptr, MY_CXT.pxs_deferred_stash);
     OUTPUT:
         RETVAL
+
+void
+___set_deferral_backend_generic(SV* cr)
+    CODE:
+        dMY_CXT;
+
+        fprintf(stderr, "setting deferral\n");
+
+        cr = SvRV(cr);
+
+        if (MY_CXT.deferral_cr) {
+            SvREFCNT_dec(cr);
+        }
+        else {
+            SvREFCNT_inc(cr);
+            MY_CXT.deferral_cr = cr;
+        }
+
+void
+___flush(...)
+    CODE:
+        xspr_queue_flush(aTHX);
 
 void
 ___set_conversion_helper(helper)
@@ -583,6 +746,8 @@ MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
 SV*
 promise(SV* self_sv)
     CODE:
+        dMY_CXT;
+
         Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
 
         Promise__XS* promise_ptr;
@@ -590,7 +755,7 @@ promise(SV* self_sv)
         promise_ptr->promise = self->promise;
         xspr_promise_incref(aTHX_ promise_ptr->promise);
 
-        RETVAL = _ptr_to_svrv(aTHX_ promise_ptr, pxs_stash);
+        RETVAL = _ptr_to_svrv(aTHX_ promise_ptr, MY_CXT.pxs_stash);
     OUTPUT:
         RETVAL
 
