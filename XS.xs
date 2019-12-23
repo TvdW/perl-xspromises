@@ -454,11 +454,11 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
     unsigned i;
     for (i = 0; i < count; i++) {
         if (MY_CXT.deferral_cr) {
-fprintf(stderr, "defer mode - finish/add\n");
+//fprintf(stderr, "defer mode - finish/add\n");
             xspr_queue_add(aTHX_ pending_callbacks[i], promise);
         }
         else {
-fprintf(stderr, "immediate mode - finish/add\n");
+//fprintf(stderr, "immediate mode - finish/add\n");
             xspr_immediate_process(aTHX_ pending_callbacks[i], promise);
         }
     }
@@ -574,23 +574,23 @@ void xspr_promise_then(pTHX_ xspr_promise_t* promise, xspr_callback_t* callback)
 {
     dMY_CXT;
 
-warn("start xspr_promise_then\n");
+//warn("start xspr_promise_then\n");
     if (promise->state == XSPR_STATE_PENDING) {
-fprintf(stderr, "then(): state == PENDING\n");
+//fprintf(stderr, "then(): state == PENDING\n");
         promise->pending.callbacks_count++;
         Renew(promise->pending.callbacks, promise->pending.callbacks_count, xspr_callback_t*);
         promise->pending.callbacks[promise->pending.callbacks_count-1] = callback;
 
     } else if (promise->state == XSPR_STATE_FINISHED) {
-fprintf(stderr, "then(): state == FINISHED\n");
+//fprintf(stderr, "then(): state == FINISHED\n");
 
         if (MY_CXT.deferral_cr) {
-fprintf(stderr, "defer mode - then/add\n");
+//fprintf(stderr, "defer mode - then/add\n");
             xspr_queue_add(aTHX_ callback, promise);
             xspr_queue_maybe_schedule(aTHX);
         }
         else {
-fprintf(stderr, "immediate mode - then/add\n");
+//fprintf(stderr, "immediate mode - then/add\n");
             xspr_immediate_process(aTHX_ callback, promise);
         }
     } else {
@@ -685,7 +685,7 @@ BOOT:
     MY_CXT.pxs_stash = gv_stashpv(PROMISE_CLASS, FALSE);
     MY_CXT.pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
 
-    fprintf(stderr, "initializing deferral\n");
+    //fprintf(stderr, "initializing deferral\n");
     MY_CXT.deferral_cr = NULL;
     MY_CXT.pxs_flush_cr = NULL;
 }
@@ -715,7 +715,7 @@ ___set_deferral_backend_generic(SV* cr)
     CODE:
         dMY_CXT;
 
-        fprintf(stderr, "setting deferral\n");
+        //fprintf(stderr, "setting deferral\n");
 
         cr = SvRV(cr);
 

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 
 use Test::More;
-use Promise::XS qw/deferred resolved rejected collect/;
+use Promise::XS (backend => 'AnyEvent');
 
 use AnyEvent;
 my $cv= AE::cv;

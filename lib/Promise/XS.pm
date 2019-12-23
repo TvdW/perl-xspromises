@@ -36,8 +36,6 @@ our $DETECT_MEMORY_LEAKS;
 
 sub import {
     my ($class, %args) = @_;
-use Data::Dumper;
-print STDERR Dumper( \@_, \%args );
 
     if (my $backend = $args{'backend'}) {
 
