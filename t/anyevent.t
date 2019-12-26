@@ -3,18 +3,11 @@ use strict;
 use warnings;
 
 use Test::More;
-use Promise::XS (backend => 'AnyEvent');
+use Promise::XS;
 
 use AnyEvent;
 
-#Promise::XS::Deferred::___set_deferral_backend_generic( sub {
-#    use Data::Dumper;
-#    print STDERR Dumper('generic called', 0 + @_);
-#    print STDERR Dumper($_[0]);
-#use Carp::Always;
-#    my @args = @_;
-#    &AnyEvent::postpone( $args[0] );
-#} );
+Promise::XS::use_event('AnyEvent');
 
 my $deferred = Promise::XS::deferred();
 

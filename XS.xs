@@ -114,6 +114,7 @@ typedef struct {
     HV* pxs_stash;
     HV* pxs_deferred_stash;
     SV* deferral_cr;
+    SV* deferral_arg;
 } my_cxt_t;
 
 typedef struct {
@@ -314,7 +315,7 @@ void xspr_queue_add(pTHX_ xspr_callback_t* callback, xspr_promise_t* origin)
     }
 }
 
-void _call_with_argument( pTHX_ SV* cb, SV* arg ) {
+void _call_with_1_or_2_args( pTHX_ SV* cb, SV* maybe_arg0, SV* arg1 ) {
     // --- Almost all copy-paste from “perlcall” … blegh!
     dSP;
 
@@ -322,10 +323,16 @@ void _call_with_argument( pTHX_ SV* cb, SV* arg ) {
     SAVETMPS;
 
     PUSHMARK(SP);
-    EXTEND(SP, 1);
 
-    //PUSHs( sv_2mortal(arg) );
-    PUSHs( arg );
+    if (maybe_arg0) {
+        EXTEND(SP, 2);
+        PUSHs(maybe_arg0);
+    }
+    else {
+        EXTEND(SP, 1);
+    }
+
+    PUSHs( arg1 );
     PUTBACK;
 
     call_sv(cb, G_VOID);
@@ -357,7 +364,7 @@ void xspr_queue_maybe_schedule(pTHX)
         }
     }
 
-    _call_with_argument(aTHX_ MY_CXT.deferral_cr, MY_CXT.pxs_flush_cr);
+    _call_with_1_or_2_args(aTHX_ MY_CXT.deferral_cr, MY_CXT.deferral_arg, MY_CXT.pxs_flush_cr);
 }
 
 /* Invoke the user's perl code. We need to be really sure this doesn't return early via croak/next/etc. */
@@ -454,11 +461,9 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
     unsigned i;
     for (i = 0; i < count; i++) {
         if (MY_CXT.deferral_cr) {
-//fprintf(stderr, "defer mode - finish/add\n");
             xspr_queue_add(aTHX_ pending_callbacks[i], promise);
         }
         else {
-//fprintf(stderr, "immediate mode - finish/add\n");
             xspr_immediate_process(aTHX_ pending_callbacks[i], promise);
         }
     }
@@ -574,29 +579,23 @@ void xspr_promise_then(pTHX_ xspr_promise_t* promise, xspr_callback_t* callback)
 {
     dMY_CXT;
 
-//warn("start xspr_promise_then\n");
     if (promise->state == XSPR_STATE_PENDING) {
-//fprintf(stderr, "then(): state == PENDING\n");
         promise->pending.callbacks_count++;
         Renew(promise->pending.callbacks, promise->pending.callbacks_count, xspr_callback_t*);
         promise->pending.callbacks[promise->pending.callbacks_count-1] = callback;
 
     } else if (promise->state == XSPR_STATE_FINISHED) {
-//fprintf(stderr, "then(): state == FINISHED\n");
 
         if (MY_CXT.deferral_cr) {
-//fprintf(stderr, "defer mode - then/add\n");
             xspr_queue_add(aTHX_ callback, promise);
             xspr_queue_maybe_schedule(aTHX);
         }
         else {
-//fprintf(stderr, "immediate mode - then/add\n");
             xspr_immediate_process(aTHX_ callback, promise);
         }
     } else {
         assert(0);
     }
-//warn("end xspr_promise_then\n");
 }
 
 /* Returns a promise if the given SV is a thenable. Ownership handed to the caller! */
@@ -633,14 +632,12 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
             xspr_promise_incref(aTHX_ promise);
 
             xspr_result_decref(aTHX_ new_result);
-printf("Got a different promise 1\n");
             return promise;
 
         } else {
             xspr_promise_t* promise = xspr_promise_new(aTHX);
             xspr_promise_finish(aTHX_ promise, new_result);
             xspr_result_decref(aTHX_ new_result);
-printf("Got a different promise 2\n");
             return promise;
         }
     }
@@ -667,6 +664,24 @@ SV* _ptr_to_svrv(pTHX_ void* ptr, HV* stash) {
     return retval;
 }
 
+/* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
+static inline xspr_promise_t* create_next_promise_if_needed(pTHX_ SV* self_sv, SV** stack_ptr) {
+    if (GIMME_V != G_VOID) {
+        PROMISE_CLASS_TYPE* next_promise;
+        Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
+
+        xspr_promise_t* next = xspr_promise_new(aTHX);
+        next_promise->promise = next;
+
+        *stack_ptr = sv_newmortal();
+        sv_setref_pv(*stack_ptr, sv_reftype(SvRV(self_sv), true), (void*)next_promise);
+
+        return next;
+    }
+
+    return NULL;
+}
+
 //----------------------------------------------------------------------
 
 MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
@@ -685,8 +700,8 @@ BOOT:
     MY_CXT.pxs_stash = gv_stashpv(PROMISE_CLASS, FALSE);
     MY_CXT.pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
 
-    //fprintf(stderr, "initializing deferral\n");
     MY_CXT.deferral_cr = NULL;
+    MY_CXT.deferral_arg = NULL;
     MY_CXT.pxs_flush_cr = NULL;
 }
 
@@ -711,20 +726,26 @@ create()
         RETVAL
 
 void
-___set_deferral_generic(SV* cr)
+___set_deferral_generic(SV* cr, ...)
     CODE:
         dMY_CXT;
-
-        //fprintf(stderr, "setting deferral\n");
 
         cr = SvRV(cr);
 
         if (MY_CXT.deferral_cr) {
-            SvREFCNT_dec(cr);
+            SvREFCNT_dec(MY_CXT.deferral_cr);
         }
-        else {
-            SvREFCNT_inc(cr);
-            MY_CXT.deferral_cr = cr;
+
+        MY_CXT.deferral_cr = cr;
+        SvREFCNT_inc(MY_CXT.deferral_cr);
+
+        if (items > 1) {
+            if (MY_CXT.deferral_arg) {
+                SvREFCNT_dec(MY_CXT.deferral_arg);
+            }
+
+            MY_CXT.deferral_arg = ST(1);
+            SvREFCNT_inc(MY_CXT.deferral_arg);
         }
 
 void
@@ -829,10 +850,9 @@ then(SV* self_sv, ...)
     PPCODE:
         Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
 
-        //fprintf(stderr, "in PPCODE\n");
         SV* on_resolve;
         SV* on_reject;
-        xspr_promise_t* next = NULL;
+        xspr_promise_t* next;
 
         if (items > 3) {
             croak_xs_usage(cv, "self, on_resolve, on_reject");
@@ -841,71 +861,36 @@ then(SV* self_sv, ...)
         on_resolve = (items > 1) ? ST(1) : &PL_sv_undef;
         on_reject  = (items > 2) ? ST(2) : &PL_sv_undef;
 
-        /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
-        if (GIMME_V != G_VOID) {
-            PROMISE_CLASS_TYPE* next_promise;
-            Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
-
-            next = xspr_promise_new(aTHX);
-            next_promise->promise = next;
-
-            ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), PROMISE_CLASS, (void*)next_promise);
-        }
+        next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ on_resolve, on_reject, next);
         xspr_promise_then(aTHX_ self->promise, callback);
-        //fprintf(stderr, "end PPCODE\n");
 
-        XSRETURN(1);
+        XSRETURN(next ? 1 : 0);
 
 void
 catch(SV* self_sv, SV* on_reject)
     PPCODE:
         Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
 
-        xspr_promise_t* next = NULL;
-
-        /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
-        if (GIMME_V != G_VOID) {
-            PROMISE_CLASS_TYPE* next_promise;
-            Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
-
-            next = xspr_promise_new(aTHX);
-            next_promise->promise = next;
-
-            ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), PROMISE_CLASS, (void*)next_promise);
-        }
+        xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ &PL_sv_undef, on_reject, next);
         xspr_promise_then(aTHX_ self->promise, callback);
 
-        XSRETURN(1);
+        XSRETURN(next ? 1 : 0);
 
 void
 finally(SV* self_sv, SV* on_finally)
     PPCODE:
         Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
 
-        xspr_promise_t* next = NULL;
-
-        /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
-        if (GIMME_V != G_VOID) {
-            PROMISE_CLASS_TYPE* next_promise;
-            Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
-
-            next = xspr_promise_new(aTHX);
-            next_promise->promise = next;
-
-            ST(0) = sv_newmortal();
-            sv_setref_pv(ST(0), PROMISE_CLASS, (void*)next_promise);
-        }
+        xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
         xspr_callback_t* callback = xspr_callback_new_finally(aTHX_ on_finally, next);
         xspr_promise_then(aTHX_ self->promise, callback);
 
-        XSRETURN(1);
+        XSRETURN(next ? 1 : 0);
 
 SV *
 _unhandled_rejection_sr(SV* self_sv)
