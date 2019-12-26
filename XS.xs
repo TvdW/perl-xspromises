@@ -9,8 +9,8 @@
 
 #define MY_CXT_KEY "Promise::XS::_guts" XS_VERSION
 
-#define PROMISE_CLASS "Promise::XS"
-#define PROMISE_CLASS_TYPE Promise__XS
+#define PROMISE_CLASS "Promise::XS::Promise"
+#define PROMISE_CLASS_TYPE Promise__XS__Promise
 
 #define DEFERRED_CLASS "Promise::XS::Deferred"
 #define DEFERRED_CLASS_TYPE Promise__XS__Deferred
@@ -651,9 +651,9 @@ Promise__XS__Deferred* _get_deferred_from_sv(pTHX_ SV *self_sv) {
     return (Promise__XS__Deferred *) SvUV(referent);
 }
 
-Promise__XS* _get_promise_from_sv(pTHX_ SV *self_sv) {
+Promise__XS__Promise* _get_promise_from_sv(pTHX_ SV *self_sv) {
     SV *referent = SvRV(self_sv);
-    return (Promise__XS *) SvUV(referent);
+    return (Promise__XS__Promise *) SvUV(referent);
 }
 
 SV* _ptr_to_svrv(pTHX_ void* ptr, HV* stash) {
@@ -674,7 +674,7 @@ static inline xspr_promise_t* create_next_promise_if_needed(pTHX_ SV* self_sv, S
         next_promise->promise = next;
 
         *stack_ptr = sv_newmortal();
-        sv_setref_pv(*stack_ptr, sv_reftype(SvRV(self_sv), true), (void*)next_promise);
+        sv_setref_pv(*stack_ptr, PROMISE_CLASS, (void*)next_promise);
 
         return next;
     }
@@ -762,8 +762,6 @@ ___set_conversion_helper(helper)
             croak("Refusing to set a conversion helper twice");
         MY_CXT.conversion_helper = newSVsv(helper);
 
-MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
-
 SV*
 promise(SV* self_sv)
     CODE:
@@ -771,7 +769,7 @@ promise(SV* self_sv)
 
         Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
 
-        Promise__XS* promise_ptr;
+        Promise__XS__Promise* promise_ptr;
         Newxz(promise_ptr, 1, PROMISE_CLASS_TYPE);
         promise_ptr->promise = self->promise;
         xspr_promise_incref(aTHX_ promise_ptr->promise);
@@ -843,12 +841,12 @@ DESTROY(SV *self_sv)
         Safefree(self);
 
 
-MODULE = Promise::XS     PACKAGE = Promise::XS
+MODULE = Promise::XS     PACKAGE = Promise::XS::Promise
 
 void
 then(SV* self_sv, ...)
     PPCODE:
-        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
 
         SV* on_resolve;
         SV* on_reject;
@@ -871,7 +869,7 @@ then(SV* self_sv, ...)
 void
 catch(SV* self_sv, SV* on_reject)
     PPCODE:
-        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
 
         xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
@@ -883,7 +881,7 @@ catch(SV* self_sv, SV* on_reject)
 void
 finally(SV* self_sv, SV* on_finally)
     PPCODE:
-        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
 
         xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
@@ -895,7 +893,7 @@ finally(SV* self_sv, SV* on_finally)
 SV *
 _unhandled_rejection_sr(SV* self_sv)
     CODE:
-        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
 
         if (self->promise->unhandled_rejection_sv) {
             RETVAL = newRV_inc( newSVsv( self->promise->unhandled_rejection_sv ) );
@@ -909,7 +907,7 @@ _unhandled_rejection_sr(SV* self_sv)
 void
 DESTROY(SV* self_sv)
     CODE:
-        Promise__XS* self = _get_promise_from_sv(aTHX_ self_sv);
+        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
 
