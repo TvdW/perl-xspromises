@@ -17,4 +17,10 @@ WriteMakefile(
     DEFINE            => '', # e.g., '-DHAVE_SOMETHING'
     INC               => '-I.', # e.g., '-I. -I/usr/include/other'
     LICENSE           => "perl_5",
+
+    TEST_REQUIRES => {
+        'Test::More' => 0,
+        'Test::Deep' => 0,
+        'Test::FailWarnings' => 0,
+    },
 );
