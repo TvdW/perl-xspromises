@@ -70,9 +70,9 @@ struct xspr_result_s {
 };
 
 struct xspr_promise_s {
+    xspr_promise_state_t state;
     pid_t detect_leak_pid;
     SV* unhandled_rejection_sv;
-    xspr_promise_state_t state;
     int refs;
     union {
         struct {
@@ -653,14 +653,14 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
     return NULL;
 }
 
-Promise__XS__Deferred* _get_deferred_from_sv(pTHX_ SV *self_sv) {
+DEFERRED_CLASS_TYPE* _get_deferred_from_sv(pTHX_ SV *self_sv) {
     SV *referent = SvRV(self_sv);
-    return INT2PTR(Promise__XS__Deferred *, SvUV(referent));
+    return INT2PTR(DEFERRED_CLASS_TYPE*, SvUV(referent));
 }
 
-Promise__XS__Promise* _get_promise_from_sv(pTHX_ SV *self_sv) {
+PROMISE_CLASS_TYPE* _get_promise_from_sv(pTHX_ SV *self_sv) {
     SV *referent = SvRV(self_sv);
-    return INT2PTR(Promise__XS__Promise*, SvUV(referent));
+    return INT2PTR(PROMISE_CLASS_TYPE*, SvUV(referent));
 }
 
 SV* _ptr_to_svrv(pTHX_ void* ptr, HV* stash) {
@@ -780,9 +780,9 @@ promise(SV* self_sv)
     CODE:
         dMY_CXT;
 
-        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+        DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
 
-        Promise__XS__Promise* promise_ptr;
+        PROMISE_CLASS_TYPE* promise_ptr;
         Newxz(promise_ptr, 1, PROMISE_CLASS_TYPE);
         promise_ptr->promise = self->promise;
         xspr_promise_incref(aTHX_ promise_ptr->promise);
@@ -794,7 +794,7 @@ promise(SV* self_sv)
 SV*
 resolve(SV *self_sv, ...)
     CODE:
-        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+        DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
 
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot resolve deferred: not pending");
@@ -822,7 +822,7 @@ resolve(SV *self_sv, ...)
 SV*
 reject(SV *self_sv, ...)
     CODE:
-        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+        DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
 
         if (self->promise->state != XSPR_STATE_PENDING) {
             croak("Cannot reject deferred: not pending");
@@ -850,7 +850,7 @@ reject(SV *self_sv, ...)
 SV*
 clear_unhandled_rejection(SV *self_sv)
     CODE:
-        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+        DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
         self->promise->unhandled_rejection_sv = NULL;
 
         if (GIMME_V == G_VOID) {
@@ -866,7 +866,7 @@ clear_unhandled_rejection(SV *self_sv)
 bool
 is_pending(SV *self_sv)
     CODE:
-        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+        DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
 
         RETVAL = (self->promise->state == XSPR_STATE_PENDING);
     OUTPUT:
@@ -875,7 +875,7 @@ is_pending(SV *self_sv)
 void
 DESTROY(SV *self_sv)
     CODE:
-        Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
+        DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
 
         _warn_on_destroy_if_needed(aTHX_ self->promise, self_sv);
 
@@ -888,7 +888,7 @@ MODULE = Promise::XS     PACKAGE = Promise::XS::Promise
 void
 then(SV* self_sv, ...)
     PPCODE:
-        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
+        PROMISE_CLASS_TYPE* self = _get_promise_from_sv(aTHX_ self_sv);
 
         SV* on_resolve;
         SV* on_reject;
@@ -911,7 +911,7 @@ then(SV* self_sv, ...)
 void
 catch(SV* self_sv, SV* on_reject)
     PPCODE:
-        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
+        PROMISE_CLASS_TYPE* self = _get_promise_from_sv(aTHX_ self_sv);
 
         xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
@@ -923,7 +923,7 @@ catch(SV* self_sv, SV* on_reject)
 void
 finally(SV* self_sv, SV* on_finally)
     PPCODE:
-        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
+        PROMISE_CLASS_TYPE* self = _get_promise_from_sv(aTHX_ self_sv);
 
         xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
@@ -935,7 +935,7 @@ finally(SV* self_sv, SV* on_finally)
 SV *
 _unhandled_rejection_sr(SV* self_sv)
     CODE:
-        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
+        PROMISE_CLASS_TYPE* self = _get_promise_from_sv(aTHX_ self_sv);
 
         if (self->promise->unhandled_rejection_sv) {
             RETVAL = newRV_inc( newSVsv( self->promise->unhandled_rejection_sv ) );
@@ -949,7 +949,7 @@ _unhandled_rejection_sr(SV* self_sv)
 void
 DESTROY(SV* self_sv)
     CODE:
-        Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
+        PROMISE_CLASS_TYPE* self = _get_promise_from_sv(aTHX_ self_sv);
 
         _warn_on_destroy_if_needed(aTHX_ self->promise, self_sv);
 

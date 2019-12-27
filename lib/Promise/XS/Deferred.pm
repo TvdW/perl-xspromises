@@ -43,6 +43,9 @@ Returns a boolean that indicates whether the promise is still pending
 
 This shouldn’t normally be necessary but can be useful in debugging.
 
+For compatibility with preexisting promise libraries, C<is_in_progress()>
+exists as an alias for this logic.
+
 =head2 $obj = I<OBJ>->clear_unhandled_rejection()
 
 Ordinarily, if a promise’s rejection is “unhandled”, a warning about the
@@ -50,6 +53,10 @@ unhandled rejection is produced. Call this after C<reject()> to silence
 that warning. (It’s generally better, of course, to handle all errors.)
 
 =cut
+
+#----------------------------------------------------------------------
+
+*is_in_progress = *is_pending;
 
 #----------------------------------------------------------------------
 # Undocumented, by design:
