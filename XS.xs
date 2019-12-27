@@ -6,6 +6,7 @@
 #include "ppport.h"
 
 #include <stdbool.h>
+#include <unistd.h>
 
 #define MY_CXT_KEY "Promise::XS::_guts" XS_VERSION
 
@@ -14,6 +15,12 @@
 
 #define DEFERRED_CLASS "Promise::XS::Deferred"
 #define DEFERRED_CLASS_TYPE Promise__XS__Deferred
+
+#ifdef PL_phase
+#define PXS_IS_GLOBAL_DESTRUCTION PL_phase == PERL_PHASE_DESTRUCT
+#else
+#define PXS_IS_GLOBAL_DESTRUCTION PL_dirty
+#endif
 
 typedef struct xspr_callback_s xspr_callback_t;
 typedef struct xspr_promise_s xspr_promise_t;
@@ -63,7 +70,7 @@ struct xspr_result_s {
 };
 
 struct xspr_promise_s {
-    bool detect_leak_yn;
+    pid_t detect_leak_pid;
     SV* unhandled_rejection_sv;
     xspr_promise_state_t state;
     int refs;
@@ -648,17 +655,17 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
 
 Promise__XS__Deferred* _get_deferred_from_sv(pTHX_ SV *self_sv) {
     SV *referent = SvRV(self_sv);
-    return (Promise__XS__Deferred *) SvUV(referent);
+    return INT2PTR(Promise__XS__Deferred *, SvUV(referent));
 }
 
 Promise__XS__Promise* _get_promise_from_sv(pTHX_ SV *self_sv) {
     SV *referent = SvRV(self_sv);
-    return (Promise__XS__Promise *) SvUV(referent);
+    return INT2PTR(Promise__XS__Promise*, SvUV(referent));
 }
 
 SV* _ptr_to_svrv(pTHX_ void* ptr, HV* stash) {
-    SV* referent = newSVuv( (const UV)(ptr) );
-    SV* retval = newRV_inc(referent);
+    SV* referent = newSVuv( PTR2UV(ptr) );
+    SV* retval = newRV_noinc(referent);
     sv_bless(retval, stash);
 
     return retval;
@@ -680,6 +687,12 @@ static inline xspr_promise_t* create_next_promise_if_needed(pTHX_ SV* self_sv, S
     }
 
     return NULL;
+}
+
+void _warn_on_destroy_if_needed(pTHX_ xspr_promise_t* promise, SV* self_sv) {
+    if (promise->detect_leak_pid && PXS_IS_GLOBAL_DESTRUCTION && promise->detect_leak_pid == getpid()) {
+        warn( "======================================================================\nXXXXXX - %s survived until global destruction; memory leak likely!\n======================================================================\n", SvPV_nolen(self_sv) );
+    }
 }
 
 //----------------------------------------------------------------------
@@ -717,7 +730,7 @@ create()
 
         SV *detect_leak_perl = get_sv("Promise::XS::DETECT_MEMORY_LEAKS", 0);
 
-        promise->detect_leak_yn = detect_leak_perl && SvTRUE(detect_leak_perl);
+        promise->detect_leak_pid = SvTRUE(detect_leak_perl) ? getpid() : 0;
 
         deferred_ptr->promise = promise;
 
@@ -778,7 +791,7 @@ promise(SV* self_sv)
     OUTPUT:
         RETVAL
 
-void
+SV*
 resolve(SV *self_sv, ...)
     CODE:
         Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
@@ -796,8 +809,18 @@ resolve(SV *self_sv, ...)
         xspr_promise_finish(aTHX_ self->promise, result);
         xspr_result_decref(aTHX_ result);
 
-void
-reject(SV *self_sv, SV *reason)
+        if (GIMME_V == G_VOID) {
+            RETVAL = NULL;
+        }
+        else {
+            SvREFCNT_inc(self_sv);
+            RETVAL = self_sv;
+        }
+    OUTPUT:
+        RETVAL
+
+SV*
+reject(SV *self_sv, ...)
     CODE:
         Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
 
@@ -813,6 +836,16 @@ reject(SV *self_sv, SV *reason)
 
         xspr_promise_finish(aTHX_ self->promise, result);
         xspr_result_decref(aTHX_ result);
+
+        if (GIMME_V == G_VOID) {
+            RETVAL = NULL;
+        }
+        else {
+            SvREFCNT_inc(self_sv);
+            RETVAL = self_sv;
+        }
+    OUTPUT:
+        RETVAL
 
 void
 clear_unhandled_rejection(SV *self_sv)
@@ -834,8 +867,7 @@ DESTROY(SV *self_sv)
     CODE:
         Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
 
-        if (self->promise->detect_leak_yn) {
-        }
+        _warn_on_destroy_if_needed(aTHX_ self->promise, self_sv);
 
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
@@ -908,6 +940,9 @@ void
 DESTROY(SV* self_sv)
     CODE:
         Promise__XS__Promise* self = _get_promise_from_sv(aTHX_ self_sv);
+
+        _warn_on_destroy_if_needed(aTHX_ self->promise, self_sv);
+
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
 

@@ -5,7 +5,7 @@ use warnings;
 use Test::More;
 use Promise::XS;
 
-use AnyEvent;
+eval { require AnyEvent; 1 } or plan skip_all => $@;
 
 Promise::XS::use_event('AnyEvent');
 

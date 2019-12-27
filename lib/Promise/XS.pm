@@ -83,7 +83,8 @@ just satisfies the Promises/A+ convention.
 
 =over
 
-=item * C<all()> and C<race()> should be implemented in XS.
+=item * C<all()> and C<race()> should be implemented in XS,
+as should C<resolved()> and C<rejected()>.
 
 =back
 
@@ -95,6 +96,9 @@ which mimics ECMAScript’s C<Promise> class as much as possible. It can even
 I<almost>—but not quite—as fast as using this module directly.
 
 =cut
+
+use Exporter 'import';
+our @EXPORT_OK= qw/all collect deferred resolved rejected/;
 
 use Promise::XS::Loader ();
 use Promise::XS::Deferred ();
@@ -119,6 +123,14 @@ sub use_event {
     else {
         die( __PACKAGE__ . ": unknown event engine: $name" );
     }
+}
+
+sub resolved {
+    return deferred()->resolve(@_)->promise();
+}
+
+sub rejected {
+    return deferred()->reject(@_)->promise();
 }
 
 #----------------------------------------------------------------------
@@ -192,9 +204,5 @@ sub race {
 
     return $deferred->promise();
 }
-
-#----------------------------------------------------------------------
-
-package Promise::XS::Promise;
 
 1;

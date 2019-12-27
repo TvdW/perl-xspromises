@@ -3,10 +3,14 @@ use strict;
 use warnings;
 
 use Test::More;
-use Promise::XS (deferral => 'AnyEvent');
 
-use AnyEvent;
-my $cv= AE::cv;
+eval { require AnyEvent; 1 } or plan skip_all => $@;
+
+use Promise::XS;
+
+Promise::XS::use_event('AnyEvent');
+
+my $cv= AnyEvent->condvar;
 
 my $deferred= Promise::XS::deferred();
 my $promise= $deferred->promise;

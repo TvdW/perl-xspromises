@@ -5,9 +5,9 @@ use warnings;
 use Test::More;
 use Promise::XS;
 
-Promise::XS::use_event('Mojo::IOLoop');
+eval { require Mojo::IOLoop; 1 } or plan skip_all => $@;
 
-use Mojo::IOLoop;
+Promise::XS::use_event('Mojo::IOLoop');
 
 my $deferred = Promise::XS::deferred();
 

@@ -5,7 +5,7 @@ use warnings;
 use Test::More;
 use Promise::XS;
 
-use IO::Async::Loop;
+eval { require IO::Async::Loop; 1 } or plan skip_all => $@;
 
 my $loop = IO::Async::Loop->new();
 

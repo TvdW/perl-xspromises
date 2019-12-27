@@ -3,15 +3,18 @@ use strict;
 use warnings;
 
 use Test::More;
-use AnyEvent;
-use AnyEvent::XSPromises qw/deferred resolved rejected collect/;
+
+eval { require AnyEvent; 1 } or plan skip_all => $@;
+
+use Promise::XS qw/deferred resolved rejected collect/;
+Promise::XS::use_event('AnyEvent');
 
 sub delayed {
     my ($seconds, $sub)= @_;
-    my $timer; $timer= AE::timer $seconds, 0, sub {
+    my $timer; $timer= AnyEvent->timer( after => $seconds, cb => sub {
         undef $timer;
         &$sub;
-    };
+    } );
 }
 sub expect_resolve {
     $_[0]->then(sub {
@@ -417,7 +420,7 @@ my @promises= map {
     })
 } keys %tests;
 
-my $cv= AE::cv;
+my $cv= AnyEvent->condvar();
 collect(@promises)->then(sub {
     ok(1, "All good");
     1;
