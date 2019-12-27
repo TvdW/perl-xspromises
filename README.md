@@ -81,11 +81,3 @@ Besides [AnyEvent::XSPromises](https://metacpan.org/pod/AnyEvent::XSPromises) an
 which mimics ECMAScript’s `Promise` class as much as possible. It can even
 (experimentally) use this module as a backend, so it’ll be
 _almost_—but not quite—as fast as using this module directly.
-
-# POD ERRORS
-
-Hey! **The above document had some coding errors, which are explained below:**
-
-- Around line 38:
-
-    Non-ASCII character seen before =encoding in 'interface—C&lt;deferred()>'. Assuming UTF-8

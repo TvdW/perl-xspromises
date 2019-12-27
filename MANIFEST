@@ -4,6 +4,7 @@ Changes
 LICENSE
 MANIFEST
 Makefile.PL
+README.md
 XS.xs
 lib/Promise/XS.pm
 lib/Promise/XS/Deferred.pm

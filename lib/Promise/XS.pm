@@ -3,6 +3,8 @@ package Promise::XS;
 use strict;
 use warnings;
 
+=encoding utf-8
+
 =head1 NAME
 
 Promise::XS - Fast promises in Perl
