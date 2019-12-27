@@ -847,11 +847,21 @@ reject(SV *self_sv, ...)
     OUTPUT:
         RETVAL
 
-void
+SV*
 clear_unhandled_rejection(SV *self_sv)
     CODE:
         Promise__XS__Deferred* self = _get_deferred_from_sv(aTHX_ self_sv);
         self->promise->unhandled_rejection_sv = NULL;
+
+        if (GIMME_V == G_VOID) {
+            RETVAL = NULL;
+        }
+        else {
+            SvREFCNT_inc(self_sv);
+            RETVAL = self_sv;
+        }
+    OUTPUT:
+        RETVAL
 
 bool
 is_pending(SV *self_sv)
