@@ -28,9 +28,14 @@ The following aggregator functions are exposed:
 For compatibility with preexisting libraries, `all()` may also be called
 as `collect()`.
 
-# STATUS
+The following also exist:
 
-The basics of this interface—`deferred()`
+    my $pre_resolved_promise = Promise::XS::resolved('already', 'done');
+
+    my $pre_rejected_promise = Promise::XS::rejected('it’s', 'bad');
+
+All of `Promise::XS`’s static functions may be exported at load time,
+e.g., `use Promise::XS qw(deferred)`.
 
 # DESCRIPTION
 
@@ -38,6 +43,35 @@ This module exposes a Promise interface with its major parts
 implemented in XS for speed. It is a fork and refactor of
 [AnyEvent::XSPromises](https://metacpan.org/pod/AnyEvent::XSPromises). That module’s interface, a “bare-bones”
 subset of that from [Promises](https://metacpan.org/pod/Promises), is retained.
+
+# STATUS
+
+Breaking changes in this interface are unlikely; however, the implementation
+is relatively untested since the fork. Your mileage may vary.
+
+# DIFFERENCES FROM ECMASCRIPT PROMISES
+
+This library is built for compatibility with pre-existing Perl promise
+libraries. It thus exhibits some salient differences from how
+ECMAScript promises work:
+
+- Promise resolutions and rejections consist of _lists_, not
+single values.
+- Neither the `resolve()` method of deferred objects
+nor the `resolved()` convenience function define behavior when given
+a promise object.
+- The `all()` and `race()` functions accept a list of promises,
+not a “scalar-array-thing” (ECMAScript “arrays” being what in Perl we
+call “array references”). So whereas in ECMAScript you do:
+
+        Promise.all( [ promise1, promise2 ] );
+
+    … in this library it’s:
+
+        Promise::XS::all( $promise1, $promise2 );
+
+See [Promise::ES6](https://metacpan.org/pod/Promise::ES6) for an interface that imitates ECMAScript promises
+more closely.
 
 # EVENT LOOPS
 
@@ -69,6 +103,11 @@ See each one’s documentation for details about supported event loops.
 
 **REMINDER:** There’s no reason why promises _need_ an event loop; it
 just satisfies the Promises/A+ convention.
+
+# MEMORY LEAK DETECTION
+
+Any promise created while `$Promise::ES6::DETECT_MEMORY_LEAKS` is truthy
+will throw a warning if it survives until global destruction.
 
 # TODO
 

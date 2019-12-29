@@ -1,3 +1,8 @@
+package Promise::XS::Promise;
+
+use strict;
+use warnings;
+
 =encoding utf-8
 
 =head1 NAME
@@ -32,3 +37,22 @@ return instances of (exactly) this class. That may change eventually,
 but for now this is what’s what.
 
 =cut
+
+sub _warn_unhandled {
+    my ($promise_sv, @reasons) = @_;
+
+    if (1 == @reasons) {
+        warn "$promise_sv: Unhandled rejection: $reasons[0]\n";
+    }
+    else {
+        my $total = 0 + @reasons;
+
+        for my $i ( 0 .. $#reasons ) {
+            my $num = 1 + $i;
+
+            warn "$promise_sv: Unhandled rejection ($num of $total): $reasons[$i]\n";
+        }
+    }
+}
+
+1;

@@ -35,9 +35,14 @@ The following aggregator functions are exposed:
 For compatibility with preexisting libraries, C<all()> may also be called
 as C<collect()>.
 
-=head1 STATUS
+The following also exist:
 
-The basics of this interface—C<deferred()>
+    my $pre_resolved_promise = Promise::XS::resolved('already', 'done');
+
+    my $pre_rejected_promise = Promise::XS::rejected('it’s', 'bad');
+
+All of C<Promise::XS>’s static functions may be exported at load time,
+e.g., C<use Promise::XS qw(deferred)>.
 
 =head1 DESCRIPTION
 
@@ -45,6 +50,41 @@ This module exposes a Promise interface with its major parts
 implemented in XS for speed. It is a fork and refactor of
 L<AnyEvent::XSPromises>. That module’s interface, a “bare-bones”
 subset of that from L<Promises>, is retained.
+
+=head1 STATUS
+
+Breaking changes in this interface are unlikely; however, the implementation
+is relatively untested since the fork. Your mileage may vary.
+
+=head1 DIFFERENCES FROM ECMASCRIPT PROMISES
+
+This library is built for compatibility with pre-existing Perl promise
+libraries. It thus exhibits some salient differences from how
+ECMAScript promises work:
+
+=over
+
+=item * Promise resolutions and rejections consist of I<lists>, not
+single values.
+
+=item * Neither the C<resolve()> method of deferred objects
+nor the C<resolved()> convenience function define behavior when given
+a promise object.
+
+=item * The C<all()> and C<race()> functions accept a list of promises,
+not a “scalar-array-thing” (ECMAScript “arrays” being what in Perl we
+call “array references”). So whereas in ECMAScript you do:
+
+    Promise.all( [ promise1, promise2 ] );
+
+… in this library it’s:
+
+    Promise::XS::all( $promise1, $promise2 );
+
+=back
+
+See L<Promise::ES6> for an interface that imitates ECMAScript promises
+more closely.
 
 =head1 EVENT LOOPS
 
@@ -81,6 +121,11 @@ See each one’s documentation for details about supported event loops.
 B<REMINDER:> There’s no reason why promises I<need> an event loop; it
 just satisfies the Promises/A+ convention.
 
+=head1 MEMORY LEAK DETECTION
+
+Any promise created while C<$Promise::ES6::DETECT_MEMORY_LEAKS> is truthy
+will throw a warning if it survives until global destruction.
+
 =head1 TODO
 
 =over
@@ -90,13 +135,6 @@ as should C<resolved()> and C<rejected()>.
 
 =back
 
-=head1 SEE ALSO
-
-Besides L<AnyEvent::XSPromises> and L<Promises>, you may like L<Promise::ES6>,
-which mimics ECMAScript’s C<Promise> class as much as possible. It can even
-(experimentally) use this module as a backend, so it’ll be
-I<almost>—but not quite—as fast as using this module directly.
-
 =cut
 
 use Exporter 'import';
@@ -104,6 +142,7 @@ our @EXPORT_OK= qw/all collect deferred resolved rejected/;
 
 use Promise::XS::Loader ();
 use Promise::XS::Deferred ();
+use Promise::XS::Promise ();
 
 our $DETECT_MEMORY_LEAKS;
 
@@ -206,5 +245,16 @@ sub race {
 
     return $deferred->promise();
 }
+
+#----------------------------------------------------------------------
+
+=head1 SEE ALSO
+
+Besides L<AnyEvent::XSPromises> and L<Promises>, you may like L<Promise::ES6>,
+which mimics ECMAScript’s C<Promise> class as much as possible. It can even
+(experimentally) use this module as a backend, so it’ll be
+I<almost>—but not quite—as fast as using this module directly.
+
+=cut
 
 1;
