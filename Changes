@@ -1,18 +1,4 @@
-Revision history for Perl extension AnyEvent::XSPromises.
+Revision history for Perl extension Promise::XS:
 
-0.005  Mon Feb 25 2019
-    - unalias values passed to resolve/reject
-
-0.004  Tue Feb 19 2019
-    - resolve rare error caused by call to undefined function
-
-0.003  Fri Feb 8 2019
-    - add is_in_progress to deferred object
-
-0.002  Thu Feb 7 2019
-    - stricter implementation of Promises/A+ spec
-
-0.001  Sat Jul 14 2018
-    - original version; created by h2xs 1.23 with options
-        -b 5.10.0 -n XSPromises --version 0.001 -g -A --skip-exporter
-
+0.01 Sun Dec 29 2019
+    - Initial release
