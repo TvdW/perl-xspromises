@@ -722,7 +722,7 @@ static inline xspr_promise_t* create_next_promise_if_needed(pTHX_ SV* original, 
     return NULL;
 }
 
-void _warn_on_destroy_if_needed(pTHX_ xspr_promise_t* promise, SV* self_sv) {
+static inline void _warn_on_destroy_if_needed(pTHX_ xspr_promise_t* promise, SV* self_sv) {
     if (promise->detect_leak_pid && PXS_IS_GLOBAL_DESTRUCTION && promise->detect_leak_pid == getpid()) {
         warn( "======================================================================\nXXXXXX - %s survived until global destruction; memory leak likely!\n======================================================================\n", SvPV_nolen(self_sv) );
     }
