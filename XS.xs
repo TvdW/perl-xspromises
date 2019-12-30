@@ -700,7 +700,7 @@ static inline xspr_promise_t* create_promise(pTHX) {
 }
 
 /* Many promises are just thrown away after the final callback, no need to allocate a next promise for those */
-static inline xspr_promise_t* create_next_promise_if_needed(pTHX_ SV** stack_ptr) {
+static inline xspr_promise_t* create_next_promise_if_needed(pTHX_ SV* original, SV** stack_ptr) {
     if (GIMME_V != G_VOID) {
         PROMISE_CLASS_TYPE* next_promise;
         Newxz(next_promise, 1, PROMISE_CLASS_TYPE);
@@ -709,7 +709,12 @@ static inline xspr_promise_t* create_next_promise_if_needed(pTHX_ SV** stack_ptr
         next_promise->promise = next;
 
         *stack_ptr = sv_newmortal();
-        sv_setref_pv(*stack_ptr, PROMISE_CLASS, (void*)next_promise);
+
+        // This would be simpler, but let’s facilitate subclassing.
+        // sv_setref_pv(*stack_ptr, PROMISE_CLASS, (void*)next_promise);
+
+        sv_setref_pv(*stack_ptr, NULL, (void*)next_promise);
+        sv_bless(*stack_ptr, SvSTASH(SvRV(original)));
 
         return next;
     }
@@ -944,7 +949,7 @@ then(SV* self_sv, ...)
         on_resolve = (items > 1) ? ST(1) : &PL_sv_undef;
         on_reject  = (items > 2) ? ST(2) : &PL_sv_undef;
 
-        next = create_next_promise_if_needed(aTHX_ &ST(0));
+        next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ on_resolve, on_reject, next);
         xspr_promise_then(aTHX_ self->promise, callback);
@@ -956,7 +961,7 @@ catch(SV* self_sv, SV* on_reject)
     PPCODE:
         PROMISE_CLASS_TYPE* self = _get_promise_from_sv(aTHX_ self_sv);
 
-        xspr_promise_t* next = create_next_promise_if_needed(aTHX_ &ST(0));
+        xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
         xspr_callback_t* callback = xspr_callback_new_perl(aTHX_ &PL_sv_undef, on_reject, next);
         xspr_promise_then(aTHX_ self->promise, callback);
@@ -968,7 +973,7 @@ finally(SV* self_sv, SV* on_finally)
     PPCODE:
         PROMISE_CLASS_TYPE* self = _get_promise_from_sv(aTHX_ self_sv);
 
-        xspr_promise_t* next = create_next_promise_if_needed(aTHX_ &ST(0));
+        xspr_promise_t* next = create_next_promise_if_needed(aTHX_ self_sv, &ST(0));
 
         xspr_callback_t* callback = xspr_callback_new_finally(aTHX_ on_finally, next);
         xspr_promise_then(aTHX_ self->promise, callback);

@@ -18,5 +18,6 @@ t/aplus.t
 t/detect_memory_leaks.t
 t/ioasync.t
 t/mojo.t
+t/subclass.t
 t/sync.t
 t/unhandled_rejection.t

@@ -109,6 +109,14 @@ just satisfies the Promises/A+ convention.
 Any promise created while `$Promise::ES6::DETECT_MEMORY_LEAKS` is truthy
 will throw a warning if it survives until global destruction.
 
+# SUBCLASSING
+
+You can re-bless a [Promise::XS::Promise](https://metacpan.org/pod/Promise::XS::Promise) instance into a different class,
+and `then()`, `catch()`, and `finally()` will assign their newly-created
+promise into that other class. (It follows that the other class must subclass
+[Promise::XS::Promise](https://metacpan.org/pod/Promise::XS::Promise).) This can be useful, e.g., for implementing
+mid-flight controls like cancellation.
+
 # TODO
 
 - `all()` and `race()` should be implemented in XS,

@@ -126,6 +126,14 @@ just satisfies the Promises/A+ convention.
 Any promise created while C<$Promise::ES6::DETECT_MEMORY_LEAKS> is truthy
 will throw a warning if it survives until global destruction.
 
+=head1 SUBCLASSING
+
+You can re-bless a L<Promise::XS::Promise> instance into a different class,
+and C<then()>, C<catch()>, and C<finally()> will assign their newly-created
+promise into that other class. (It follows that the other class must subclass
+L<Promise::XS::Promise>.) This can be useful, e.g., for implementing
+mid-flight controls like cancellation.
+
 =head1 TODO
 
 =over
