@@ -47,9 +47,13 @@ use Promise::XS;
 #----------------------------------------------------------------------
 
 {
-    my @inc_args = map { "-I$_" } @INC;
+    my @inc_args = map { ( '-I', $_ ) } @INC;
 
-    my $got = `$^X @inc_args -Mstrict -Mwarnings -MPromise::XS -e'\$Promise::XS::DETECT_MEMORY_LEAKS = 1; open STDERR, ">>&=", *STDOUT; my \$deferred = Promise::XS::deferred(); my \$ar = [ \$deferred ]; push \@\$ar, \$ar;'`;
+    use File::Spec;
+    my ($dir) = File::Spec->splitdir( __FILE__ );
+    my $script_path = File::Spec->join( $dir, 'assets', 'deferred_leak.pl' );
+
+    my $got = `$^X @inc_args -Mstrict -Mwarnings -MPromise::XS $script_path`;
 
     warn "CHILD_ERROR: $?" if $?;
 
@@ -70,7 +74,7 @@ use Promise::XS;
 
     use File::Spec;
     my ($dir) = File::Spec->splitdir( __FILE__ );
-    my $script_path = File::Spec->join( $dir, 'assets', 'leak.pl' );
+    my $script_path = File::Spec->join( $dir, 'assets', 'promise_leak.pl' );
 
     my $got = `$^X @inc_args -Mstrict -Mwarnings -MPromise::XS $script_path`;
 
