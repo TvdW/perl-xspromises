@@ -758,32 +758,38 @@ BOOT:
 
 #ifdef USE_ITHREADS
 
+# ithreads would seem to be a very bad idea in Promise-based code,
+# but anyway ..
+
 void
 CLONE(...)
-    CODE:
-        dMY_CXT;
+    PPCODE:
 
         SV* conversion_helper = NULL;
         SV* pxs_flush_cr = NULL;
         SV* deferral_cr = NULL;
         SV* deferral_arg = NULL;
 
-        CLONE_PARAMS params = {NULL, 0, MY_CXT.owner};
+        {
+            dMY_CXT;
 
-        if ( MY_CXT.conversion_helper ) {
-            conversion_helper = sv_dup_inc( MY_CXT.conversion_helper, &params );
-        }
+            CLONE_PARAMS params = {NULL, 0, MY_CXT.owner};
 
-        if ( MY_CXT.pxs_flush_cr ) {
-            pxs_flush_cr = sv_dup_inc( MY_CXT.pxs_flush_cr, &params );
-        }
+            if ( MY_CXT.conversion_helper ) {
+                conversion_helper = sv_dup_inc( MY_CXT.conversion_helper, &params );
+            }
 
-        if ( MY_CXT.deferral_cr ) {
-            deferral_cr = sv_dup_inc( MY_CXT.deferral_cr, &params );
-        }
+            if ( MY_CXT.pxs_flush_cr ) {
+                pxs_flush_cr = sv_dup_inc( MY_CXT.pxs_flush_cr, &params );
+            }
 
-        if ( MY_CXT.deferral_arg ) {
-            deferral_arg = sv_dup_inc( MY_CXT.deferral_arg, &params );
+            if ( MY_CXT.deferral_cr ) {
+                deferral_cr = sv_dup_inc( MY_CXT.deferral_cr, &params );
+            }
+
+            if ( MY_CXT.deferral_arg ) {
+                deferral_arg = sv_dup_inc( MY_CXT.deferral_arg, &params );
+            }
         }
 
         {
@@ -800,6 +806,8 @@ CLONE(...)
             MY_CXT.pxs_stash = gv_stashpv(PROMISE_CLASS, FALSE);
             MY_CXT.pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
         }
+
+        XSRETURN_UNDEF;
 
 #endif /* USE_ITHREADS */
 
