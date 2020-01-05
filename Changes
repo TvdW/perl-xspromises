@@ -2,6 +2,9 @@ Revision history for Perl extension Promise::XS:
 
 0.03
     - Optimize all() and race() by reducing number of Perl callbacks
+    - Fix C99 dependency.
+    - Specify disabled prototypes in XS.
+    - Skip failing test in Win32. (Fix maybe forthcoming … ?)
     - Attempt to support ithreads. (Thank you, RANDIR!)
     - Add GitHub data to Makefile.PL
 

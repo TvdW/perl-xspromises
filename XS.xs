@@ -830,6 +830,8 @@ CLONE(...)
 
 MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
 
+PROTOTYPES: DISABLE
+
 SV *
 create()
     CODE:
@@ -990,8 +992,11 @@ DESTROY(SV *self_sv)
         xspr_promise_decref(aTHX_ self->promise);
         Safefree(self);
 
+# ----------------------------------------------------------------------
 
 MODULE = Promise::XS     PACKAGE = Promise::XS::Promise
+
+PROTOTYPES: DISABLE
 
 void
 then(SV* self_sv, ...)
@@ -1050,7 +1055,9 @@ DESTROY(SV* self_sv)
 
             SV* warn_args[1 + rejection->count];
             warn_args[0] = self_sv;
-            for (unsigned i=0; i<rejection->count; i++) {
+
+            unsigned i;
+            for (i=0; i<rejection->count; i++) {
                 warn_args[1 + i] = rejection->results[i];
             }
 
