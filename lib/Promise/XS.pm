@@ -143,6 +143,17 @@ as should C<resolved()> and C<rejected()>.
 
 =back
 
+=head1 KNOWN ISSUES
+
+=over
+
+=item * Interpreter-based threads may or may not work.
+
+=item * This module interacts badly with Perl’s fork() implementation on
+Windows. There may be a workaround possible, but none is implemented for now.
+
+=back
+
 =cut
 
 use Exporter 'import';
