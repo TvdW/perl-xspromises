@@ -123,7 +123,7 @@ just satisfies the Promises/A+ convention.
 
 =head1 MEMORY LEAK DETECTION
 
-Any promise created while C<$Promise::ES6::DETECT_MEMORY_LEAKS> is truthy
+Any promise created while C<$Promise::XS::DETECT_MEMORY_LEAKS> is truthy
 will throw a warning if it survives until global destruction.
 
 =head1 SUBCLASSING
