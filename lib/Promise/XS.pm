@@ -276,9 +276,10 @@ sub race {
 =head1 SEE ALSO
 
 Besides L<AnyEvent::XSPromises> and L<Promises>, you may like L<Promise::ES6>,
-which mimics ECMAScript’s C<Promise> class as much as possible. It can even
-(experimentally) use this module as a backend, so it’ll be
-I<almost>—but not quite—as fast as using this module directly.
+which mimics L<ECMAScript’s “Promise” class|https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise> as much as possible.
+It can even
+(experimentally) use this module as a backend, which helps but is still
+significantly slower than using this module directly.
 
 =cut
 
