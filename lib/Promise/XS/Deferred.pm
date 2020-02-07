@@ -77,10 +77,18 @@ sub set_deferral_IOAsync {
     );
 }
 
+# Old Mojo::IOLoop versions didn’t include next_tick().
+sub _mojo_next_tick_compat {
+    Mojo::IOLoop->timer( 0, $_[1] );
+}
+
 sub set_deferral_Mojo() {
     require Mojo::IOLoop;
+
+    my $next_tick = Mojo::IOLoop->can('next_tick') || \&_mojo_next_tick_compat;
+
     ___set_deferral_generic(
-        Mojo::IOLoop->can('next_tick'),
+        $next_tick,
         'Mojo::IOLoop',
     );
 }
