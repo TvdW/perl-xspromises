@@ -3,7 +3,7 @@ package Promise::XS::Loader;
 use strict;
 use warnings;
 
-our $VERSION = '0.07_01';
+our $VERSION = '0.07_02';
 
 require XSLoader;
 XSLoader::load('Promise::XS', $VERSION);
