@@ -76,7 +76,7 @@ more closely.
 # DIFFERENCES FROM [Promises](https://metacpan.org/pod/Promises) ET AL.
 
 This module implements ECMAScript’s `finally()` interface, which differs
-from that implemented in other Perl promise implementations.
+from that in some other Perl promise implementations.
 
 Given the following …
 

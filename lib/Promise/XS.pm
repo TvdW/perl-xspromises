@@ -89,7 +89,7 @@ more closely.
 =head1 DIFFERENCES FROM L<Promises> ET AL.
 
 This module implements ECMAScript’s C<finally()> interface, which differs
-from that implemented in other Perl promise implementations.
+from that in some other Perl promise implementations.
 
 Given the following …
 
