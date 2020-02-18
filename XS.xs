@@ -429,13 +429,13 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_c
     SAVE_DEFSV;
     DEFSV_set(sv_newmortal());
 
-    count = call_sv(perl_fn, G_EVAL | (is_finally ? G_VOID : G_ARRAY));
+    count = call_sv(perl_fn, G_EVAL | (is_finally ? G_VOID | G_DISCARD : G_ARRAY));
 
     SPAGAIN;
-    error = ERRSV;
-    if (SvTRUE(error)) {
+
+    if (SvTRUE(ERRSV)) {
         result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, 1);
-        result->results[0] = newSVsv(error);
+        result->results[0] = newSVsv(ERRSV);
     } else {
         result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, count);
         for (i = 0; i < count; i++) {

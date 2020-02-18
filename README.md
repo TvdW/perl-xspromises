@@ -73,9 +73,23 @@ call “array references”). So whereas in ECMAScript you do:
 See [Promise::ES6](https://metacpan.org/pod/Promise::ES6) for an interface that imitates ECMAScript promises
 more closely.
 
+# DIFFERENCES FROM [Promises](https://metacpan.org/pod/Promises) ET AL.
+
+This module implements ECMAScript’s `finally()` interface, which differs
+from that implemented in other Perl promise implementations.
+
+Given the following …
+
+    my $new = $p->finally( $callback )
+
+- `$callback` is given no arguments and is called in void context.
+- If `$callback` returns, `$new` has the same status as `$p`.
+- If `$callback` throws, `$new` is rejected with `$callback`’s
+exception.
+
 # EVENT LOOPS
 
-This library, by default, uses no event loop. This is a perfectly usable
+By default this library uses no event loop. This is a perfectly usable
 configuration; however, it’ll be a bit different from how promises usually
 work in evented contexts (e.g., JavaScript) because callbacks will execute
 immediately rather than at the end of the event loop as the Promises/A+
