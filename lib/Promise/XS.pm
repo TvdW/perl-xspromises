@@ -86,9 +86,29 @@ call “array references”). So whereas in ECMAScript you do:
 See L<Promise::ES6> for an interface that imitates ECMAScript promises
 more closely.
 
+=head1 DIFFERENCES FROM L<Promises> ET AL.
+
+This module implements ECMAScript’s C<finally()> interface, which differs
+from that implemented in other Perl promise implementations.
+
+Given the following …
+
+    my $new = $p->finally( $callback )
+
+=over
+
+=item * C<$callback> is given no arguments and is called in void context.
+
+=item * If C<$callback> returns, C<$new> has the same status as C<$p>.
+
+=item * If C<$callback> throws, C<$new> is rejected with C<$callback>’s
+exception.
+
+=back
+
 =head1 EVENT LOOPS
 
-This library, by default, uses no event loop. This is a perfectly usable
+By default this library uses no event loop. This is a perfectly usable
 configuration; however, it’ll be a bit different from how promises usually
 work in evented contexts (e.g., JavaScript) because callbacks will execute
 immediately rather than at the end of the event loop as the Promises/A+
@@ -263,8 +283,6 @@ sub race {
     };
 
     for my $given_promise (@_) {
-        last if $is_done;
-
         $given_promise->then($on_resolve_cr, $on_reject_cr);
     }
 

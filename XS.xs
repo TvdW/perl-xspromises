@@ -107,7 +107,7 @@ xspr_result_t* xspr_result_from_error(pTHX_ const char *error);
 void xspr_result_incref(pTHX_ xspr_result_t* result);
 void xspr_result_decref(pTHX_ xspr_result_t* result);
 
-xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_count);
+xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_count, bool is_finally);
 xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input);
 
 
@@ -168,7 +168,8 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
             result = xspr_invoke_perl(aTHX_
                                       callback_fn,
                                       origin->finished.result->results,
-                                      origin->finished.result->count
+                                      origin->finished.result->count,
+                                      false
                                       );
 
             if (callback->perl.next != NULL) {
@@ -213,13 +214,19 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
     } else if (callback->type == XSPR_CALLBACK_FINALLY) {
         SV* callback_fn = callback->finally.on_finally;
         if (callback_fn != NULL) {
-            xspr_result_t* result;
-            result = xspr_invoke_perl(aTHX_
-                                      callback_fn,
-                                      origin->finished.result->results,
-                                      origin->finished.result->count
-                                      );
-            xspr_result_decref(aTHX_ result);
+            xspr_result_t* result = xspr_invoke_perl( aTHX_
+                callback_fn,
+                NULL, 0,
+                true
+            );
+
+            if (result->state == XSPR_RESULT_REJECTED) {
+                xspr_result_decref(aTHX_ origin->finished.result);
+                origin->finished.result = result;
+            }
+            else {
+                xspr_result_decref(aTHX_ result);
+            }
         }
 
         if (callback->finally.next != NULL) {
@@ -397,7 +404,7 @@ void xspr_queue_maybe_schedule(pTHX)
 }
 
 /* Invoke the user's perl code. We need to be really sure this doesn't return early via croak/next/etc. */
-xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_count)
+xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_count, bool is_finally)
 {
     dSP;
     unsigned count, i;
@@ -422,7 +429,7 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_c
     SAVE_DEFSV;
     DEFSV_set(sv_newmortal());
 
-    count = call_sv(perl_fn, G_EVAL|G_ARRAY);
+    count = call_sv(perl_fn, G_EVAL | (is_finally ? G_VOID : G_ARRAY));
 
     SPAGAIN;
     error = ERRSV;
@@ -647,7 +654,7 @@ xspr_promise_t* xspr_promise_from_sv(pTHX_ SV* input)
     if (method_gv != NULL && isGV(method_gv) && GvCV(method_gv) != NULL) {
         dMY_CXT;
 
-        xspr_result_t* new_result = xspr_invoke_perl(aTHX_ MY_CXT.conversion_helper, &input, 1);
+        xspr_result_t* new_result = xspr_invoke_perl(aTHX_ MY_CXT.conversion_helper, &input, 1, false);
         if (new_result->state == XSPR_RESULT_RESOLVED &&
             new_result->results != NULL &&
             new_result->count == 1 &&

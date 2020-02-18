@@ -6,9 +6,89 @@ use strict;
 use warnings;
 
 use Test::More;
+use Test::Deep;
 use Test::FailWarnings;
 
 use Promise::XS;
+
+# should not warn because catch() silences
+{
+    my $d = Promise::XS::deferred();
+
+    my $p = $d->promise()->catch( sub { } );
+
+    $d->reject("nonono");
+}
+
+# should warn because finally() rejects
+{
+    my @w;
+    local $SIG{'__WARN__'} = sub { push @w, @_ };
+
+    {
+        my $d = Promise::XS::deferred();
+
+        my $p = $d->promise()->finally( sub { } );
+
+        $d->reject("nonono");
+    }
+
+    cmp_deeply(
+        \@w,
+        [ re( qr<nonono> ) ],
+        'rejection with no catch triggers warning',
+    );
+}
+
+# should warn because finally() rejects
+{
+    my @w;
+    local $SIG{'__WARN__'} = sub { push @w, @_ };
+
+    {
+        my $d = Promise::XS::deferred();
+
+        my $p = $d->promise();
+
+        my $f = $p->finally( sub { } );
+
+        $p->catch( sub { } );
+
+        $d->reject("nonono");
+    }
+
+    cmp_deeply(
+        \@w,
+        [ re( qr<nonono> ) ],
+        'rejected finally is uncaught',
+    );
+}
+
+# should warn because finally() rejection is caught
+{
+    my @w;
+    local $SIG{'__WARN__'} = sub { push @w, @_ };
+
+    {
+        my $d = Promise::XS::deferred();
+
+        my $p = $d->promise();
+
+        my $f = $p->finally( sub { } )->catch( sub { } );
+
+        $p->catch( sub { } );
+
+        $d->reject("nonono");
+    }
+
+    cmp_deeply(
+        \@w,
+        [],
+        'when finally passthrough rejection is caught',
+    );
+}
+
+#----------------------------------------------------------------------
 
 {
     my $d = Promise::XS::deferred();
