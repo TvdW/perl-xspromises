@@ -778,11 +778,19 @@ SV* _ptr_to_svrv(pTHX_ void* ptr, HV* stash) {
 }
 
 static inline xspr_promise_t* create_promise(pTHX) {
+    dMY_CXT;
+
     xspr_promise_t* promise = xspr_promise_new(aTHX);
 
-    SV *detect_leak_perl = get_sv("Promise::XS::DETECT_MEMORY_LEAKS", 0);
+    SV *detect_leak_perl;
 
-    promise->detect_leak_pid = SvTRUE(detect_leak_perl) ? getpid() : 0;
+    SV** dml_svgv = hv_fetchs( MY_CXT.pxs_base_stash, "DETECT_MEMORY_LEAKS", 0 );
+
+    if (dml_svgv) {
+        detect_leak_perl = GvSV(*dml_svgv);
+    }
+
+    promise->detect_leak_pid = detect_leak_perl && SvTRUE(detect_leak_perl) ? getpid() : 0;
 
     return promise;
 }
@@ -832,6 +840,7 @@ BOOT:
     MY_CXT.backend_scheduled = 0;
     MY_CXT.conversion_helper = NULL;
 
+    MY_CXT.pxs_base_stash = gv_stashpv(BASE_CLASS, FALSE);
     MY_CXT.pxs_promise_stash = gv_stashpv(PROMISE_CLASS, FALSE);
     MY_CXT.pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
 
@@ -889,6 +898,7 @@ CLONE(...)
             MY_CXT.deferral_arg = deferral_arg;
 
             // Clone HVs
+            MY_CXT.pxs_base_stash = gv_stashpv(BASE_CLASS, FALSE);
             MY_CXT.pxs_promise_stash = gv_stashpv(PROMISE_CLASS, FALSE);
             MY_CXT.pxs_deferred_stash = gv_stashpv(DEFERRED_CLASS, FALSE);
         }
