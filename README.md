@@ -55,8 +55,6 @@ This library is built for compatibility with pre-existing Perl promise
 libraries. It thus exhibits some salient differences from how
 ECMAScript promises work:
 
-- Promise resolutions and rejections consist of _lists_, not
-single values.
 - Neither the `resolve()` method of deferred objects
 nor the `resolved()` convenience function define behavior when given
 a promise object.
@@ -70,8 +68,26 @@ call “array references”). So whereas in ECMAScript you do:
 
         Promise::XS::all( $promise1, $promise2 );
 
+- Promise resolutions and rejections may contain multiple values.
+(But see ["AVOID MULTIPLES"](#avoid-multiples) below.)
+
 See [Promise::ES6](https://metacpan.org/pod/Promise::ES6) for an interface that imitates ECMAScript promises
 more closely.
+
+# AVOID MULTIPLES
+
+For compatibility with preexisting Perl promise libraries, Promise::XS
+allows a promise to resolve or reject with multiple values. This behavior,
+while eminently “perlish”, allows for some weird cases where the relevant
+standards don’t apply: for example, what happens if multiple promises are
+returned from a promise callback? Or even just a single promise plus extra
+returns?
+
+Promise::XS tries to help you catch such cases by throwing a warning
+if multiple return values from a callback contain a promise as the
+first member. For best results, though—and consistency with promise
+implementations outside Perl—resolve/reject all promises with _single_
+values.
 
 # DIFFERENCES FROM [Promises](https://metacpan.org/pod/Promises) ET AL.
 
@@ -80,12 +96,13 @@ from that in some other Perl promise implementations.
 
 Given the following …
 
-    my $new = $p->finally( $callback )
+    my $new = $p->finally( $callback );
 
-- `$callback` is given no arguments and is called in void context.
-- If `$callback` returns, `$new` has the same status as `$p`.
-- If `$callback` throws, `$new` is rejected with `$callback`’s
-exception.
+- `$callback` is given no arguments.
+- If `$callback` returns anything but a single, rejected promise,
+`$new` has the same status as `$p`.
+- If `$callback` throws or returns a single, rejected promise,
+`$new` is rejected with `$callback`’s exception.
 
 # EVENT LOOPS
 
