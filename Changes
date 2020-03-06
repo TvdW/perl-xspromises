@@ -1,6 +1,6 @@
 Revision history for Perl extension Promise::XS:
 
-0.09
+0.09 Fri 6 Mar 2020
 - Fix uninitialized pointer.
 
 0.08 Mon 24 Feb 2020
