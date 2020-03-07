@@ -951,8 +951,9 @@ ___set_deferral_generic(SV* cr, ...)
             SvREFCNT_inc(MY_CXT.deferral_arg);
         }
 
+# We don’t care if there are args or not.
 void
-___flush(...)   // We don’t care if there are args or not.
+___flush(...)
     CODE:
         xspr_queue_flush(aTHX);
 
