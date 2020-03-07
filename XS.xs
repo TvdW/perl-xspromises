@@ -458,7 +458,6 @@ xspr_result_t* xspr_invoke_perl(pTHX_ SV* perl_fn, SV** inputs, unsigned input_c
 {
     dSP;
     unsigned count, i;
-    SV* error;
     xspr_result_t* result;
 
     if (!SvROK(perl_fn)) {
@@ -907,21 +906,6 @@ CLONE(...)
 
 #endif /* USE_ITHREADS && defined(sv_dup_inc) */
 
-#SV *
-#resolved(...)
-#    CODE:
-#        xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, items);
-#        unsigned i;
-#        for (i = 0; i < items; i++) {
-#            result->results[i] = newSVsv(ST(i));
-#        }
-#
-#        xspr_promise_t* promise = create_promise(aTHX);
-#        xspr_promise_finish(aTHX_ promise, result);
-#        xspr_result_decref(aTHX_ result);
-#    OUTPUT:
-#        RETVAL
-
 #----------------------------------------------------------------------
 
 MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
@@ -968,7 +952,7 @@ ___set_deferral_generic(SV* cr, ...)
         }
 
 void
-___flush(...)
+___flush(...)   // We don’t care if there are args or not.
     CODE:
         xspr_queue_flush(aTHX);
 
@@ -1066,7 +1050,10 @@ SV*
 clear_unhandled_rejection(SV *self_sv)
     CODE:
         DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
-        // self->promise->unhandled_rejection = NULL;
+
+        if (self->promise->state == XSPR_STATE_FINISHED) {
+            self->promise->finished.result->rejection_should_warn = false;
+        }
 
         if (GIMME_V == G_VOID) {
             RETVAL = NULL;

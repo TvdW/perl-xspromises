@@ -20,6 +20,29 @@ use Promise::XS;
     $d->reject("nonono");
 }
 
+{
+    my @w;
+    local $SIG{'__WARN__'} = sub { push @w, @_ };
+
+    {
+        my $d = Promise::XS::deferred();
+
+        $d->reject("nonono");
+
+        $d->clear_unhandled_rejection();
+    }
+
+    is_deeply(\@w, [], 'no warning after clear_unhandled_rejection()');
+
+    {
+        my $d = Promise::XS::deferred();
+
+        $d->reject("nonono");
+    }
+
+    cmp_deeply(\@w, [ re( qr<nono> ) ], 'warning normally');
+}
+
 # should warn because finally() rejects
 {
     my @w;
