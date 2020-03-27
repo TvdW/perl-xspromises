@@ -2,6 +2,7 @@ Revision history for Perl extension Promise::XS:
 
 0.10
 - BUG FIX: Fix clear_unhandled_rejection() to work again.
+- Create all() and race() methods in Promise::XS::Promise.
 - Resolve a few inconsequential compiler warnings.
 
 0.09 Fri 6 Mar 2020

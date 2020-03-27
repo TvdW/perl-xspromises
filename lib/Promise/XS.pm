@@ -231,79 +231,16 @@ sub rejected {
 
 #----------------------------------------------------------------------
 # Aggregator functions
-
-# Lifted from AnyEvent::XSPromises
 sub all {
-    my $remaining= 0+@_;
-    my @values;
-    my $failed= 0;
-    my $then_what= deferred();
-    my $pending= 1;
-    my $i= 0;
+    return Promise::XS::Promise->all(@_);
+}
 
-    my $reject_now = sub {
-        if (!$failed++) {
-            $pending= 0;
-            $then_what->reject(@_);
-        }
-    };
-
-    for my $p (@_) {
-        my $i = $i++;
-
-        $p->then(
-            sub {
-                $values[$i]= \@_;
-                if ((--$remaining) == 0) {
-                    $pending= 0;
-                    $then_what->resolve(@values);
-                }
-            },
-            $reject_now,
-        );
-    }
-    if (!$remaining && $pending) {
-        $then_what->resolve(@values);
-    }
-    return $then_what->promise;
+sub race {
+    return Promise::XS::Promise->race(@_);
 }
 
 # Compatibility with other promise interfaces.
 *collect = *all;
-
-# Lifted from Promise::ES6
-sub race {
-
-    my $deferred = deferred();
-
-    my $is_done;
-
-    my $on_resolve_cr = sub {
-        return if $is_done;
-        $is_done = 1;
-
-        $deferred->resolve(@_);
-
-        # Proactively eliminate references:
-        undef $deferred;
-    };
-
-    my $on_reject_cr = sub {
-        return if $is_done;
-        $is_done = 1;
-
-        $deferred->reject(@_);
-
-        # Proactively eliminate references:
-        undef $deferred;
-    };
-
-    for my $given_promise (@_) {
-        $given_promise->then($on_resolve_cr, $on_reject_cr);
-    }
-
-    return $deferred->promise();
-}
 
 #----------------------------------------------------------------------
 
