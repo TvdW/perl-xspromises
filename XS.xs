@@ -170,9 +170,11 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
     assert(origin->state == XSPR_STATE_FINISHED);
 
     if (callback->type == XSPR_CALLBACK_CHAIN) {
+fprintf(stderr, "xspr_callback_process/XSPR_CALLBACK_CHAIN\n");
         xspr_promise_finish(aTHX_ callback->chain, origin->finished.result);
 
     } else if (callback->type == XSPR_CALLBACK_FINALLY_CHAIN) {
+fprintf(stderr, "xspr_callback_process/XSPR_CALLBACK_FINALLY_CHAIN\n");
         xspr_promise_finish(aTHX_
             callback->finally_chain.chain_promise,
             RESULT_IS_REJECTED(origin->finished.result) ? origin->finished.result : callback->finally_chain.original_result
@@ -183,9 +185,11 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
         xspr_promise_t* next_promise;
 
         if (callback->type == XSPR_CALLBACK_FINALLY) {
+fprintf(stderr, "xspr_callback_process/XSPR_CALLBACK_FINALLY\n");
             callback_fn = callback->finally.on_finally;
             next_promise = callback->finally.next;
         } else {
+fprintf(stderr, "xspr_callback_process/XSPR_CALLBACK_PERL\n");
             next_promise = callback->perl.next;
 
             if (RESULT_IS_RESOLVED(origin->finished.result)) {
@@ -194,6 +198,7 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
                 callback_fn = callback->perl.on_reject;
 
                 if (callback_fn && SvOK(callback_fn)) {
+fprintf( stderr, "marking handled\n" );
                     origin->finished.result->rejection_should_warn = false;
                 }
 
@@ -217,6 +222,11 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
                 );
             }
 
+if (next_promise == NULL && callback->type == XSPR_CALLBACK_FINALLY && RESULT_IS_RESOLVED(callback_result) && RESULT_IS_REJECTED(origin->finished.result)) {
+fprintf(stderr, "FINALLY: replacing original after callback success\n");
+    xspr_result_decref(aTHX_ callback_result);
+    callback_result = pxs_result_clone( aTHX_ origin->finished.result );
+}
             if (next_promise != NULL) {
                 bool finish_promise = true;
 
@@ -260,11 +270,13 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
 
                 if (finish_promise) {
                     xspr_result_t* final_result;
+                    bool final_result_needs_decref = false;;
 
                     if ((callback->type == XSPR_CALLBACK_FINALLY) && RESULT_IS_RESOLVED(callback_result)) {
+fprintf(stderr, "finally callback ok\n");
                         final_result = origin->finished.result;
 
-                        if (RESULT_IS_REJECTED(callback_result)) {
+                        if (RESULT_IS_REJECTED(final_result)) {
 
                             // If finally()’s callback succeeds, it takes
                             // on the resolution status of the “parent”
@@ -274,6 +286,10 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
                             // an unhandled-rejection warning, even if the
                             // parent’s rejection is eventually handled.
                             final_result = pxs_result_clone(aTHX_ final_result);
+fprintf(stderr, "cloned %p from xspr_callback_process\n", final_result);
+                            final_result_needs_decref = true;
+fprintf(stderr, "==> replacement (%p) state: %d\n", final_result, final_result->state );
+fprintf(stderr, "==> replacement (%p) should warn: %d\n", final_result, final_result->rejection_should_warn );
                         }
                     }
                     else {
@@ -281,10 +297,16 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
                     }
 
                     xspr_promise_finish(aTHX_ next_promise, final_result);
+
+                    if (final_result_needs_decref) {
+                        xspr_result_decref(aTHX_ final_result);
+                    }
                 }
             }
 
+fprintf(stderr, "before free callback_result\n");
             xspr_result_decref(aTHX_ callback_result);
+fprintf(stderr, "after free callback_result\n");
 
         } else if (next_promise) {
             /* No callback, so we're just passing the result along. */
@@ -522,6 +544,7 @@ void xspr_result_incref(pTHX_ xspr_result_t* result)
 void xspr_result_decref(pTHX_ xspr_result_t* result)
 {
     if (--(result->refs) == 0) {
+fprintf(stderr, "freeing result (%p, state? %d)\n", result, result->state);
         if (RESULT_IS_REJECTED(result) && result->rejection_should_warn) {
             SV* warn_args[result->count];
 
@@ -559,6 +582,7 @@ void xspr_promise_finish(pTHX_ xspr_promise_t* promise, xspr_result_t* result)
 
     promise->state = XSPR_STATE_FINISHED;
     promise->finished.result = result;
+fprintf(stderr, "promise %p’s result is now %p\n", promise, result);
     xspr_result_incref(aTHX_ promise->finished.result);
 
     unsigned i;
@@ -596,6 +620,7 @@ xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state, unsigned count)
     Newxz(result->results, count, SV*);
     result->rejection_should_warn = true;
     result->state = state;
+fprintf(stderr, "new result (%p) state: %d\n", result, state);
     result->refs = 1;
     result->count = count;
     return result;
@@ -604,6 +629,8 @@ xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state, unsigned count)
 xspr_result_t* pxs_result_clone(pTHX_ xspr_result_t* old)
 {
     xspr_result_t* new = xspr_result_new(aTHX_ old->state, old->count);
+
+fprintf(stderr, "cloning result (%p->%p, refs=%d, state=%d)\n", old, new, old->refs, old->state);
 
     unsigned i;
     for (i=0; i<old->count; i++) {
@@ -630,6 +657,7 @@ void xspr_promise_incref(pTHX_ xspr_promise_t* promise)
 void xspr_promise_decref(pTHX_ xspr_promise_t *promise)
 {
     if (--(promise->refs) == 0) {
+fprintf(stderr, "freeing promise %p\n", promise);
         if (promise->state == XSPR_STATE_PENDING) {
             /* XXX: is this a bad thing we should warn for? */
             int count = promise->pending.callbacks_count;
@@ -641,6 +669,7 @@ void xspr_promise_decref(pTHX_ xspr_promise_t *promise)
             Safefree(callbacks);
 
         } else if (promise->state == XSPR_STATE_FINISHED) {
+fprintf(stderr, "==> decref’ing promise result: %p\n", promise->finished.result);
             xspr_result_decref(aTHX_ promise->finished.result);
 
         } else {
@@ -701,13 +730,20 @@ xspr_callback_t* xspr_callback_new_chain(pTHX_ xspr_promise_t* chain)
 
 xspr_callback_t* xspr_callback_new_finally_chain(pTHX_ xspr_result_t* original_result, xspr_promise_t* next_promise)
 {
+fprintf(stderr, "xspr_callback_new_finally_chain\n");
     xspr_callback_t* callback;
     Newxz(callback, 1, xspr_callback_t);
     callback->type = XSPR_CALLBACK_FINALLY_CHAIN;
+
+    /*
     callback->finally_chain.original_result = original_result;
-    callback->finally_chain.chain_promise = next_promise;
     xspr_result_incref(aTHX_ original_result);
+    */
+    callback->finally_chain.original_result = pxs_result_clone(aTHX_ original_result);
+
+    callback->finally_chain.chain_promise = next_promise;
     xspr_promise_incref(aTHX_ next_promise);
+
     return callback;
 }
 

@@ -1,13 +1,11 @@
 Revision history for Perl extension Promise::XS:
 
-0.11
-- finally() now creates its own internal result that has to be caught,
-  or else an uncaught-rejection warning displays. The goal here is to
-  match ES6’s behavior.
-
 0.10
 - BUG FIX: Fix clear_unhandled_rejection() to work again.
 - Create all() and race() methods in Promise::XS::Promise.
+- finally() now creates its own internal result that has to be caught,
+  or else an uncaught-rejection warning displays. The goal here is to
+  match ES6’s behavior.
 - Resolve a few inconsequential compiler warnings.
 
 0.09 Fri 6 Mar 2020
