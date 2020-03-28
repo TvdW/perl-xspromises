@@ -226,6 +226,26 @@ use Promise::XS;
     );
 }
 
+{
+    my @w;
+
+    {
+        local $SIG{'__WARN__'} = sub { push @w, @_ };
+
+        my $p = Promise::XS::rejected(789);
+
+        my $p2 = $p->catch( sub { } );
+
+        $p->finally( sub { } );
+    }
+
+    cmp_deeply(
+        \@w,
+        [ ],
+        'rejected finally is uncaught - triggers warning',
+    );
+}
+
 # should NOT warn because finally() rejection is caught
 {
     my @w;

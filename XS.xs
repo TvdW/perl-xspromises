@@ -126,6 +126,7 @@ void xspr_promise_incref(pTHX_ xspr_promise_t* promise);
 void xspr_promise_decref(pTHX_ xspr_promise_t* promise);
 
 xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state, unsigned count);
+xspr_result_t* pxs_result_clone(pTHX_ xspr_result_t* old);
 xspr_result_t* xspr_result_from_error(pTHX_ const char *error);
 void xspr_result_incref(pTHX_ xspr_result_t* result);
 void xspr_result_decref(pTHX_ xspr_result_t* result);
@@ -262,6 +263,18 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
 
                     if ((callback->type == XSPR_CALLBACK_FINALLY) && RESULT_IS_RESOLVED(callback_result)) {
                         final_result = origin->finished.result;
+
+                        if (RESULT_IS_REJECTED(callback_result)) {
+
+                            // If finally()’s callback succeeds, it takes
+                            // on the resolution status of the “parent”
+                            // promise. If that promise rejected, then,
+                            // the finally’s promise also rejects. Notably,
+                            // the finally’s promise should STILL trigger
+                            // an unhandled-rejection warning, even if the
+                            // parent’s rejection is eventually handled.
+                            final_result = pxs_result_clone(aTHX_ final_result);
+                        }
                     }
                     else {
                         final_result = callback_result;
@@ -586,6 +599,18 @@ xspr_result_t* xspr_result_new(pTHX_ xspr_result_state_t state, unsigned count)
     result->refs = 1;
     result->count = count;
     return result;
+}
+
+xspr_result_t* pxs_result_clone(pTHX_ xspr_result_t* old)
+{
+    xspr_result_t* new = xspr_result_new(aTHX_ old->state, old->count);
+
+    unsigned i;
+    for (i=0; i<old->count; i++) {
+        new->results[i] = SvREFCNT_inc( old->results[i] );
+    }
+
+    return new;
 }
 
 xspr_result_t* xspr_result_from_error(pTHX_ const char *error)
