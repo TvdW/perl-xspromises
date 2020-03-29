@@ -2,10 +2,12 @@ Revision history for Perl extension Promise::XS:
 
 0.10
 - BUG FIX: Fix clear_unhandled_rejection() to work again.
+- BUG FIX: Pre-resolved promises no longer break race().
 - Create all() and race() methods in Promise::XS::Promise.
 - finally() now creates its own internal result that has to be caught,
   or else an uncaught-rejection warning displays. The goal here is to
-  match ES6’s behavior.
+  match ES6’s behavior—as closely as possible, anyhow, given this library’s
+  support for multi-part resolutions and rejections.
 - Resolve a few inconsequential compiler warnings.
 
 0.09 Fri 6 Mar 2020

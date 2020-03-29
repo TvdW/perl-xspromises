@@ -64,10 +64,13 @@ sub all {
     my $pending= 1;
     my $i= 0;
 
+    my $promise = $then_what->promise();
+
     my $reject_now = sub {
         if (!$failed++) {
             $pending= 0;
             $then_what->reject(@_);
+            undef $then_what;   # proactively eliminate references
         }
     };
 
@@ -80,6 +83,7 @@ sub all {
                 if ((--$remaining) == 0) {
                     $pending= 0;
                     $then_what->resolve(@values);
+                    undef $then_what;   # proactively eliminate references
                 }
             },
             $reject_now,
@@ -88,7 +92,7 @@ sub all {
     if (!$remaining && $pending) {
         $then_what->resolve(@values);
     }
-    return $then_what->promise;
+    return $promise;
 }
 
 # Lifted from Promise::ES6
@@ -96,6 +100,8 @@ sub race {
     my $deferred = Promise::XS::Deferred::create();
 
     my $is_done;
+
+    my $promise = $deferred->promise();
 
     my $on_resolve_cr = sub {
         return if $is_done;
@@ -121,7 +127,7 @@ sub race {
         $given_promise->then($on_resolve_cr, $on_reject_cr);
     }
 
-    return $deferred->promise();
+    return $promise;
 }
 
 sub _warn_unhandled {

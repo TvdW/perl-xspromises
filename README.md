@@ -98,7 +98,7 @@ Given the following …
 
     my $new = $p->finally( $callback );
 
-- `$callback` is given no arguments.
+- `$callback` receives _no_ arguments.
 - If `$callback` returns anything but a single, rejected promise,
 `$new` has the same status as `$p`.
 - If `$callback` throws or returns a single, rejected promise,
