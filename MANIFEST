@@ -22,6 +22,7 @@ t/finally.t
 t/ioasync.t
 t/mojo.t
 t/multi_return.t
+t/promise_all_race.t
 t/subclass.t
 t/sync.t
 t/unhandled_rejection.t
