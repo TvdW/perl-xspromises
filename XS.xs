@@ -187,6 +187,12 @@ void xspr_callback_process(pTHX_ xspr_callback_t* callback, xspr_promise_t* orig
         if (callback->type == XSPR_CALLBACK_FINALLY) {
             callback_fn = callback->finally.on_finally;
             next_promise = callback->finally.next;
+
+            /* A finally() “catches” its parent promise, even as it
+               rethrows any failure from it. */
+            if (callback_fn && SvOK(callback_fn)) {
+                origin->finished.result->rejection_should_warn = false;
+            }
         } else {
             next_promise = callback->perl.next;
 

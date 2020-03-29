@@ -176,39 +176,12 @@ use Promise::XS;
 
     cmp_deeply(
         \@w,
-        any(
-            [ map { re( qr<nonono> ) } 1 .. 2 ],
-            [ re( qr<nonono> ) ],
-        ),
-        'rejection with finally but no catch triggers 1 warning',
-    ) or diag explain \@w;
-}
-
-{
-    my @w;
-    local $SIG{'__WARN__'} = sub { push @w, @_ };
-
-    {
-        my $d = Promise::XS::deferred();
-
-        # The finally() creates a separate result.
-        my $p = $d->promise()->finally( sub { } );
-
-        $d->reject("nonono");
-    }
-
-    cmp_deeply(
-        \@w,
-        any(
-            [ map { re( qr<nonono> ) } 1 .. 2 ],
-            [ re( qr<nonono> ) ],
-        ),
+        [ re( qr<nonono> ) ],
         'rejection with finally but no catch triggers 1 warning',
     ) or diag explain \@w;
 }
 
 # should warn because finally() gets its own result
-diag '=======================';
 {
     my @w;
     local $SIG{'__WARN__'} = sub { push @w, @_ };
@@ -222,9 +195,7 @@ diag '=======================';
 
         $p->catch( sub { } );
 
-diag "====== before reject\n";
         $d->reject("nonono");
-diag "====== after reject\n";
     }
 
     cmp_deeply(
@@ -233,7 +204,6 @@ diag "====== after reject\n";
         'rejected finally is uncaught, but rejection is caught later',
     );
 }
-diag '=======================';
 
 # var p = Promise.reject(789); var p2 = p.catch( () => {} ); p.finally( () => {} )
 {

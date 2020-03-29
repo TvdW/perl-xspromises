@@ -112,7 +112,7 @@ Given the following …
 
 =over
 
-=item * C<$callback> is given no arguments.
+=item * C<$callback> receives I<no> arguments.
 
 =item * If C<$callback> returns anything but a single, rejected promise,
 C<$new> has the same status as C<$p>.
