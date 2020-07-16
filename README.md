@@ -46,8 +46,7 @@ subset of that from [Promises](https://metacpan.org/pod/Promises), is retained.
 
 # STATUS
 
-Breaking changes in this interface are unlikely; however, the implementation
-is relatively untested since the fork. Your mileage may vary.
+This module is stable, well-tested, and suitable for production use.
 
 # DIFFERENCES FROM ECMASCRIPT PROMISES
 
@@ -91,6 +90,19 @@ values.
 
 # DIFFERENCES FROM [Promises](https://metacpan.org/pod/Promises) ET AL.
 
+## Empty or uninitialized rejection values
+
+Promise rejections fulfill the same role in asynchronous code that exceptions
+do in synchronous code. Perl helpfully warns (under the `warnings` pragma,
+anyhow) when you `die(undef)` since an uninitialized value isn’t useful as
+an error report and likely indicates a problem.
+
+Promise::XS mimics this behavior by warning if a rejection value list lacks
+a defined value. This can happen if the value list is either empty or
+contains exclusively uninitialized values.
+
+## `finally()`
+
 This module implements ECMAScript’s `finally()` interface, which differs
 from that in some other Perl promise implementations.
 
@@ -106,11 +118,12 @@ Given the following …
 
 # EVENT LOOPS
 
-By default this library uses no event loop. This is a perfectly usable
+By default this library uses no event loop. This is a generally usable
 configuration; however, it’ll be a bit different from how promises usually
 work in evented contexts (e.g., JavaScript) because callbacks will execute
 immediately rather than at the end of the event loop as the Promises/A+
-specification requires.
+specification requires. Following this pattern facilitates use of recursive
+promises without exceeding call stack limits.
 
 To achieve full Promises/A+ compliance it’s necessary to integrate with
 an event loop interface. This library supports three such interfaces:
@@ -131,9 +144,6 @@ as argument:
 Note that all three of the above are event loop **interfaces**. They
 aren’t event loops themselves, but abstractions over various event loops.
 See each one’s documentation for details about supported event loops.
-
-**REMINDER:** There’s no reason why promises _need_ an event loop; it
-just satisfies the Promises/A+ convention.
 
 # MEMORY LEAK DETECTION
 
@@ -166,3 +176,11 @@ which mimics [ECMAScript’s “Promise” class](https://developer.mozilla.org/
 It can even
 (experimentally) use this module as a backend, which helps but is still
 significantly slower than using this module directly.
+
+# POD ERRORS
+
+Hey! **The above document had some coding errors, which are explained below:**
+
+- Around line 116:
+
+    Unterminated C<...> sequence

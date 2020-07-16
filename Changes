@@ -8,6 +8,7 @@ Revision history for Perl extension Promise::XS:
   or else an uncaught-rejection warning displays. The goal here is to
   match ES6’s behavior—as closely as possible, anyhow, given this library’s
   support for multi-part resolutions and rejections.
+- Rejections with no defined values now trigger a warning.
 - Resolve a few inconsequential compiler warnings.
 
 0.09 Fri 6 Mar 2020

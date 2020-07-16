@@ -53,8 +53,7 @@ subset of that from L<Promises>, is retained.
 
 =head1 STATUS
 
-Breaking changes in this interface are unlikely; however, the implementation
-is relatively untested since the fork. Your mileage may vary.
+This module is stable, well-tested, and suitable for production use.
 
 =head1 DIFFERENCES FROM ECMASCRIPT PROMISES
 
@@ -103,6 +102,19 @@ values.
 
 =head1 DIFFERENCES FROM L<Promises> ET AL.
 
+=head2 Empty or uninitialized rejection values
+
+Promise rejections fulfill the same role in asynchronous code that exceptions
+do in synchronous code. Perl helpfully warns (under the C<warnings> pragma,
+anyhow) when you C<die(undef)> since an uninitialized value isn’t useful as
+an error report and likely indicates a problem.
+
+Promise::XS mimics this behavior by warning if a rejection value list lacks
+a defined value. This can happen if the value list is either empty or
+contains exclusively uninitialized values.
+
+=head2 C<finally()
+
 This module implements ECMAScript’s C<finally()> interface, which differs
 from that in some other Perl promise implementations.
 
@@ -124,11 +136,12 @@ C<$new> is rejected with C<$callback>’s exception.
 
 =head1 EVENT LOOPS
 
-By default this library uses no event loop. This is a perfectly usable
+By default this library uses no event loop. This is a generally usable
 configuration; however, it’ll be a bit different from how promises usually
 work in evented contexts (e.g., JavaScript) because callbacks will execute
 immediately rather than at the end of the event loop as the Promises/A+
-specification requires.
+specification requires. Following this pattern facilitates use of recursive
+promises without exceeding call stack limits.
 
 To achieve full Promises/A+ compliance it’s necessary to integrate with
 an event loop interface. This library supports three such interfaces:
@@ -153,9 +166,6 @@ as argument:
 Note that all three of the above are event loop B<interfaces>. They
 aren’t event loops themselves, but abstractions over various event loops.
 See each one’s documentation for details about supported event loops.
-
-B<REMINDER:> There’s no reason why promises I<need> an event loop; it
-just satisfies the Promises/A+ convention.
 
 =head1 MEMORY LEAK DETECTION
 
@@ -201,6 +211,9 @@ use Promise::XS::Promise ();
 
 our $DETECT_MEMORY_LEAKS;
 
+# Not meant to be altered publicly.
+our $_IN_REJECTED;
+
 use constant DEFERRAL_CR => {
     AnyEvent => \&Promise::XS::Deferred::set_deferral_AnyEvent,
     'IO::Async' => \&Promise::XS::Deferred::set_deferral_IOAsync,
@@ -226,6 +239,8 @@ sub resolved {
 }
 
 sub rejected {
+    local $_IN_REJECTED = 1;
+
     return deferred()->reject(@_)->promise();
 }
 

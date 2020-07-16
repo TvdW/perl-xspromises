@@ -881,6 +881,26 @@ static inline void _warn_on_destroy_if_needed(pTHX_ xspr_promise_t* promise, SV*
     }
 }
 
+static inline void _warn_weird_reject_if_needed( pTHX_ SV* self_sv, const char* funcname, I32 my_items ) {
+
+    char *pkgname = NULL;
+
+    HV *stash = SvSTASH( SvRV(self_sv) );
+
+    if (stash != NULL) {
+        pkgname = HvNAME(stash);
+    }
+
+    if (pkgname == NULL) pkgname = DEFERRED_CLASS;
+
+    if (my_items == 1) {
+        warn( "%s: Empty call to %s()", pkgname, funcname );
+    }
+    else {
+        warn( "%s: %s() called with only uninitialized values (%d)", pkgname, funcname, my_items - 1);
+    }
+}
+
 //----------------------------------------------------------------------
 
 MODULE = Promise::XS     PACKAGE = Promise::XS
@@ -1079,9 +1099,30 @@ reject(SV *self_sv, ...)
         }
 
         xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, items-1);
+
+        bool has_defined = false;
+
         unsigned i;
         for (i = 0; i < items-1; i++) {
             result->results[i] = newSVsv(ST(1+i));
+
+            if (!has_defined && SvOK(result->results[i])) {
+                has_defined = true;
+            }
+        }
+
+        if (!has_defined) {
+            // For some reason:
+            //  - caller_cx(0, NULL) returns NULL here
+            //  - find_runcv() returns something different inside
+            //    _warn_weird_reject_if_needed().
+
+            CV* runcv = find_runcv(NULL);
+            CV* rejectedcv = get_cv("Promise::XS::rejected", 0);
+
+            const char* funcname = (runcv == rejectedcv) ? "rejected" : "reject";
+
+            _warn_weird_reject_if_needed( aTHX_ self_sv, funcname, items );
         }
 
         xspr_promise_finish(aTHX_ self->promise, result);
