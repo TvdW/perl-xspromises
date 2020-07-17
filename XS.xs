@@ -885,7 +885,7 @@ static inline void _warn_weird_reject_if_needed( pTHX_ SV* self_sv, const char* 
 
     char *pkgname = NULL;
 
-    HV *stash = SvSTASH( SvRV(self_sv) );
+    HV *stash = (self_sv == NULL) ? NULL : SvSTASH( SvRV(self_sv) );
 
     if (stash != NULL) {
         pkgname = HvNAME(stash);
@@ -893,12 +893,66 @@ static inline void _warn_weird_reject_if_needed( pTHX_ SV* self_sv, const char* 
 
     if (pkgname == NULL) pkgname = DEFERRED_CLASS;
 
-    if (my_items == 1) {
+    if (my_items == 0) {
         warn( "%s: Empty call to %s()", pkgname, funcname );
     }
     else {
-        warn( "%s: %s() called with only uninitialized values (%d)", pkgname, funcname, my_items - 1);
+        warn( "%s: %s() called with only uninitialized values (%d)", pkgname, funcname, my_items);
     }
+}
+
+void _resolve_promise(pTHX_ xspr_promise_t* promise_p, SV** args, I32 argslen) {
+    xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, argslen);
+
+    unsigned i;
+    for (i = 0; i < argslen; i++) {
+        result->results[i] = newSVsv(args[i]);
+    }
+
+    xspr_promise_finish(aTHX_ promise_p, result);
+    xspr_result_decref(aTHX_ result);
+}
+
+void _reject_promise(pTHX_ SV* self_sv, xspr_promise_t* promise_p, SV** args, I32 argslen) {
+    xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, argslen);
+
+    bool has_defined = false;
+
+    unsigned i;
+    for (i = 0; i < argslen; i++) {
+        result->results[i] = newSVsv(args[i]);
+
+        if (!has_defined && SvOK(result->results[i])) {
+            has_defined = true;
+        }
+    }
+
+    if (!has_defined) {
+        // For some reason:
+        //  - caller_cx(0, NULL) returns NULL here
+        //  - find_runcv() returns something different inside
+        //    _warn_weird_reject_if_needed().
+
+        CV* runcv = find_runcv(NULL);
+        CV* rejectedcv = get_cv("Promise::XS::rejected", 0);
+
+        const char* funcname = (self_sv == NULL) ? "rejected" : "reject";
+
+        _warn_weird_reject_if_needed( aTHX_ self_sv, funcname, argslen );
+    }
+
+    xspr_promise_finish(aTHX_ promise_p, result);
+    xspr_result_decref(aTHX_ result);
+}
+
+SV* _promise_to_sv(pTHX_ xspr_promise_t* promise_p) {
+    dMY_CXT;
+
+    PROMISE_CLASS_TYPE* promise_ptr;
+    Newxz(promise_ptr, 1, PROMISE_CLASS_TYPE);
+    promise_ptr->promise = promise_p;
+
+    return _ptr_to_svrv(aTHX_ promise_ptr, MY_CXT.pxs_promise_stash);
 }
 
 //----------------------------------------------------------------------
@@ -984,6 +1038,28 @@ CLONE(...)
 
 #endif /* USE_ITHREADS && defined(sv_dup_inc) */
 
+SV *
+resolved(...)
+    CODE:
+        xspr_promise_t* promise_p = create_promise(aTHX);
+
+        _resolve_promise(aTHX_ promise_p, &(ST(0)), items);
+
+        RETVAL = _promise_to_sv(aTHX_ promise_p);
+    OUTPUT:
+        RETVAL
+
+SV *
+rejected(...)
+    CODE:
+        xspr_promise_t* promise_p = create_promise(aTHX);
+
+        _reject_promise(aTHX_ NULL, promise_p, &(ST(0)), items);
+
+        RETVAL = _promise_to_sv(aTHX_ promise_p);
+    OUTPUT:
+        RETVAL
+
 #----------------------------------------------------------------------
 
 MODULE = Promise::XS     PACKAGE = Promise::XS::Deferred
@@ -1048,16 +1124,11 @@ ___set_conversion_helper(helper)
 SV*
 promise(SV* self_sv)
     CODE:
-        dMY_CXT;
-
         DEFERRED_CLASS_TYPE* self = _get_deferred_from_sv(aTHX_ self_sv);
 
-        PROMISE_CLASS_TYPE* promise_ptr;
-        Newxz(promise_ptr, 1, PROMISE_CLASS_TYPE);
-        promise_ptr->promise = self->promise;
-        xspr_promise_incref(aTHX_ promise_ptr->promise);
+        xspr_promise_incref(aTHX_ self->promise);
 
-        RETVAL = _ptr_to_svrv(aTHX_ promise_ptr, MY_CXT.pxs_promise_stash);
+        RETVAL = _promise_to_sv(aTHX_ self->promise);
     OUTPUT:
         RETVAL
 
@@ -1070,14 +1141,7 @@ resolve(SV *self_sv, ...)
             croak("Cannot resolve deferred: not pending");
         }
 
-        xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, items-1);
-        unsigned i;
-        for (i = 0; i < items-1; i++) {
-            result->results[i] = newSVsv(ST(1+i));
-        }
-
-        xspr_promise_finish(aTHX_ self->promise, result);
-        xspr_result_decref(aTHX_ result);
+        _resolve_promise(aTHX_ self->promise, &(ST(1)), items - 1);
 
         if (GIMME_V == G_VOID) {
             RETVAL = NULL;
@@ -1098,35 +1162,7 @@ reject(SV *self_sv, ...)
             croak("Cannot reject deferred: not pending");
         }
 
-        xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, items-1);
-
-        bool has_defined = false;
-
-        unsigned i;
-        for (i = 0; i < items-1; i++) {
-            result->results[i] = newSVsv(ST(1+i));
-
-            if (!has_defined && SvOK(result->results[i])) {
-                has_defined = true;
-            }
-        }
-
-        if (!has_defined) {
-            // For some reason:
-            //  - caller_cx(0, NULL) returns NULL here
-            //  - find_runcv() returns something different inside
-            //    _warn_weird_reject_if_needed().
-
-            CV* runcv = find_runcv(NULL);
-            CV* rejectedcv = get_cv("Promise::XS::rejected", 0);
-
-            const char* funcname = (runcv == rejectedcv) ? "rejected" : "reject";
-
-            _warn_weird_reject_if_needed( aTHX_ self_sv, funcname, items );
-        }
-
-        xspr_promise_finish(aTHX_ self->promise, result);
-        xspr_result_decref(aTHX_ result);
+        _reject_promise(aTHX_ self_sv, self->promise, &(ST(1)), items - 1);
 
         if (GIMME_V == G_VOID) {
             RETVAL = NULL;

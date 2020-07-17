@@ -113,7 +113,7 @@ Promise::XS mimics this behavior by warning if a rejection value list lacks
 a defined value. This can happen if the value list is either empty or
 contains exclusively uninitialized values.
 
-=head2 C<finally()
+=head2 C<finally()>
 
 This module implements ECMAScript’s C<finally()> interface, which differs
 from that in some other Perl promise implementations.
@@ -129,8 +129,8 @@ Given the following …
 =item * If C<$callback> returns anything but a single, rejected promise,
 C<$new> has the same status as C<$p>.
 
-=item * If C<$callback> throws or returns a single, rejected promise,
-C<$new> is rejected with C<$callback>’s exception.
+=item * If C<$callback> throws, or if it returns a single, rejected promise,
+C<$new> is rejected with the relevant value(s).
 
 =back
 
@@ -184,8 +184,7 @@ mid-flight controls like cancellation.
 
 =over
 
-=item * C<all()> and C<race()> should be implemented in XS,
-as should C<resolved()> and C<rejected()>.
+=item * C<all()> and C<race()> should ideally be implemented in XS.
 
 =back
 
@@ -211,9 +210,6 @@ use Promise::XS::Promise ();
 
 our $DETECT_MEMORY_LEAKS;
 
-# Not meant to be altered publicly.
-our $_IN_REJECTED;
-
 use constant DEFERRAL_CR => {
     AnyEvent => \&Promise::XS::Deferred::set_deferral_AnyEvent,
     'IO::Async' => \&Promise::XS::Deferred::set_deferral_IOAsync,
@@ -232,16 +228,6 @@ sub use_event {
     else {
         die( __PACKAGE__ . ": unknown event engine: $name" );
     }
-}
-
-sub resolved {
-    return deferred()->resolve(@_)->promise();
-}
-
-sub rejected {
-    local $_IN_REJECTED = 1;
-
-    return deferred()->reject(@_)->promise();
 }
 
 #----------------------------------------------------------------------

@@ -126,7 +126,7 @@ is_deeply( $got, [234, 567], 'args to then() after a finally()' );
             ),
         ],
         'warnings for unhandled rejection and junk return',
-    );
+    ) or diag explain \@w;
 }
 
 done_testing;

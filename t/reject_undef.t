@@ -9,6 +9,8 @@ use Test::FailWarnings;
 
 use Promise::XS;
 
+my $FILE = __FILE__;
+
 {
     my $deferred = Promise::XS::Deferred::create();
 
@@ -23,6 +25,7 @@ use Promise::XS;
             all(
                 re( qr<Promise::XS::Deferred> ),
                 re( qr<reject\(> ),
+                re( qr<\Q$FILE\E> ),
             ),
         ],
         'empty reject(): warning as expected',
@@ -48,6 +51,7 @@ use Promise::XS;
                     re( qr<reject\(> ),
                     re( qr<uninitialized>i ),
                     re( qr<$count> ),
+                    re( qr<\Q$FILE\E> ),
                 ),
             ],
             "reject(undef x $count): warning as expected",
@@ -69,6 +73,7 @@ use Promise::XS;
             all(
                 re( qr<Promise::XS> ),
                 re( qr<rejected> ),
+                re( qr<\Q$FILE\E> ),
             ),
         ],
         'rejected(): warning as expected',
@@ -92,6 +97,7 @@ use Promise::XS;
                     re( qr<rejected> ),
                     re( qr<uninitialized>i ),
                     re( qr<$count> ),
+                    re( qr<\Q$FILE\E> ),
                 ),
             ],
             "rejected(undef x $count): warning as expected",
