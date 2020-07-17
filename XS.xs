@@ -901,7 +901,7 @@ static inline void _warn_weird_reject_if_needed( pTHX_ SV* self_sv, const char* 
     }
 }
 
-void _resolve_promise(pTHX_ xspr_promise_t* promise_p, SV** args, I32 argslen) {
+static inline void _resolve_promise(pTHX_ xspr_promise_t* promise_p, SV** args, I32 argslen) {
     xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_RESOLVED, argslen);
 
     unsigned i;
@@ -913,7 +913,7 @@ void _resolve_promise(pTHX_ xspr_promise_t* promise_p, SV** args, I32 argslen) {
     xspr_result_decref(aTHX_ result);
 }
 
-void _reject_promise(pTHX_ SV* self_sv, xspr_promise_t* promise_p, SV** args, I32 argslen) {
+static inline void _reject_promise(pTHX_ SV* self_sv, xspr_promise_t* promise_p, SV** args, I32 argslen) {
     xspr_result_t* result = xspr_result_new(aTHX_ XSPR_RESULT_REJECTED, argslen);
 
     bool has_defined = false;
@@ -928,14 +928,6 @@ void _reject_promise(pTHX_ SV* self_sv, xspr_promise_t* promise_p, SV** args, I3
     }
 
     if (!has_defined) {
-        // For some reason:
-        //  - caller_cx(0, NULL) returns NULL here
-        //  - find_runcv() returns something different inside
-        //    _warn_weird_reject_if_needed().
-
-        CV* runcv = find_runcv(NULL);
-        CV* rejectedcv = get_cv("Promise::XS::rejected", 0);
-
         const char* funcname = (self_sv == NULL) ? "rejected" : "reject";
 
         _warn_weird_reject_if_needed( aTHX_ self_sv, funcname, argslen );

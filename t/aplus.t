@@ -72,7 +72,7 @@ my %tests= (
         expect_reject($d->promise);
     },
     rejected_immediately => sub {
-        expect_reject(rejected());
+        expect_reject(rejected(0));
     },
     rejected_delayed => sub {
         my $d= deferred;
@@ -95,10 +95,10 @@ my %tests= (
         expect_reject(resolved->then({}));
     },
     reject_with_garbage => sub {
-        expect_reject(rejected->catch(5));
+        expect_reject(rejected(1)->catch(5));
     },
     reject_with_named_function => sub {
-        expect_reject(rejected->catch("main::fail"));
+        expect_reject(rejected(1)->catch("main::fail"));
     },
     finally_with_garbage => sub {
         expect_reject(resolved->finally(123));

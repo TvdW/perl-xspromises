@@ -113,8 +113,8 @@ Given the following …
 - `$callback` receives _no_ arguments.
 - If `$callback` returns anything but a single, rejected promise,
 `$new` has the same status as `$p`.
-- If `$callback` throws or returns a single, rejected promise,
-`$new` is rejected with `$callback`’s exception.
+- If `$callback` throws, or if it returns a single, rejected promise,
+`$new` is rejected with the relevant value(s).
 
 # EVENT LOOPS
 
@@ -160,8 +160,7 @@ mid-flight controls like cancellation.
 
 # TODO
 
-- `all()` and `race()` should be implemented in XS,
-as should `resolved()` and `rejected()`.
+- `all()` and `race()` should ideally be implemented in XS.
 
 # KNOWN ISSUES
 
@@ -176,11 +175,3 @@ which mimics [ECMAScript’s “Promise” class](https://developer.mozilla.org/
 It can even
 (experimentally) use this module as a backend, which helps but is still
 significantly slower than using this module directly.
-
-# POD ERRORS
-
-Hey! **The above document had some coding errors, which are explained below:**
-
-- Around line 116:
-
-    Unterminated C<...> sequence
