@@ -3,6 +3,12 @@ package Promise::XS;
 use strict;
 use warnings;
 
+our $VERSION;
+
+BEGIN {
+    $VERSION = '0.11';
+}
+
 =encoding utf-8
 
 =head1 NAME
